@@ -1,0 +1,105 @@
+version: '3.9'
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sanestix_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-sanestix_flow}
+      POSTGRES_USER:     ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test:     ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - sanestix_net
+
+  # ── Backend ─────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    container_name: sanestix_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV:               production
+      PORT:                   4000
+      FRONTEND_URL:           ${FRONTEND_URL}
+      DB_HOST:                postgres
+      DB_PORT:                5432
+      DB_NAME:                ${DB_NAME:-sanestix_flow}
+      DB_USER:                ${DB_USER:-postgres}
+      DB_PASSWORD:            ${DB_PASSWORD}
+      JWT_SECRET:             ${JWT_SECRET}
+      JWT_EXPIRES_IN:         ${JWT_EXPIRES_IN:-15m}
+      JWT_REFRESH_SECRET:     ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      META_VERIFY_TOKEN:      ${META_VERIFY_TOKEN}
+      META_APP_SECRET:        ${META_APP_SECRET}
+      WHATSAPP_ACCESS_TOKEN:  ${WHATSAPP_ACCESS_TOKEN}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
+      WHATSAPP_API_VERSION:   ${WHATSAPP_API_VERSION:-v19.0}
+      N8N_WEBHOOK_URL:        ${N8N_WEBHOOK_URL}
+      N8N_SECRET:             ${N8N_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sanestix_net
+
+  # ── Frontend ─────────────────────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL:    ${FRONTEND_API_URL:-/api}
+        REACT_APP_SOCKET_URL: ${FRONTEND_SOCKET_URL}
+    container_name: sanestix_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - sanestix_net
+
+  # ── NGINX ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: sanestix_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - sanestix_net
+
+  # ── Certbot (SSL auto-renew) ──────────────────────────────────
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  postgres_data:
+  certbot_www:
+
+networks:
+  sanestix_net:
+    driver: bridge
