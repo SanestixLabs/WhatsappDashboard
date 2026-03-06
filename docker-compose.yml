@@ -60,7 +60,7 @@ services:
       context:    ./frontend
       dockerfile: Dockerfile
       args:
-        REACT_APP_API_URL:    ${FRONTEND_API_URL:-/api}
+        REACT_APP_API_URL:    ${FRONTEND_API_URL:-/}
         REACT_APP_SOCKET_URL: ${FRONTEND_SOCKET_URL}
     container_name: sanestix_frontend
     restart: unless-stopped
@@ -75,18 +75,27 @@ services:
     container_name: sanestix_nginx
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - certbot_www:/var/www/certbot:ro
-    depends_on:
-      - backend
-      - frontend
+      - certbot_www:/var/www/certbot:ro 
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sanestix-http.rule=Host(`flow.sanestix.com`)"
+      - "traefik.http.routers.sanestix-http.entrypoints=web"
+      - "traefik.http.routers.sanestix-http.middlewares=sanestix-redirect"
+      - "traefik.http.routers.sanestix-https.rule=Host(`flow.sanestix.com`)"
+      - "traefik.http.routers.sanestix-https.entrypoints=websecure"
+      - "traefik.http.routers.sanestix-https.tls=true"
+      - "traefik.http.routers.sanestix-https.tls.certresolver=mytlschallenge"
+      - "traefik.http.middlewares.sanestix-redirect.redirectscheme.scheme=https"
+      - "traefik.http.services.sanestix.loadbalancer.server.port=80"
     networks:
       - sanestix_net
+      - n8n_default        
 
   # ── Certbot (SSL auto-renew) ──────────────────────────────────
   certbot:
@@ -103,3 +112,5 @@ volumes:
 networks:
   sanestix_net:
     driver: bridge
+  n8n_default:
+    external: true
