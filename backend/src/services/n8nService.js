@@ -26,6 +26,7 @@ const trigger = async (payload) => {
 
   // n8n may return array or object
   const result = Array.isArray(data) ? data[0] : data;
+  console.log('[n8n] Raw response:', JSON.stringify(data));
 
   // Validate expected shape
   if (!result || typeof result.reply !== 'string') {

@@ -150,9 +150,9 @@ const triggerN8n = async (message, conversation, contact, io) => {
   };
 
   const logResult = await query(
-    `INSERT INTO n8n_logs (conversation_id, message_id, workflow_url, request_payload, status)
-     VALUES ($1, $2, $3, $4, 'pending') RETURNING id`,
-    [conversation.id, message.id, process.env.N8N_WEBHOOK_URL, JSON.stringify(payload)]
+    `INSERT INTO n8n_logs (conversation_id, workflow_url, request_payload, status)
+     VALUES ($1, $2, $3, 'pending') RETURNING id`,
+    [conversation.id, process.env.N8N_WEBHOOK_URL, JSON.stringify(payload)]
   );
   const logId = logResult.rows[0].id;
 
