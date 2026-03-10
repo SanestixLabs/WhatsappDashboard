@@ -4,7 +4,7 @@ const jwt      = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { query } = require('../config/database');
 const { authLimiter } = require('../middleware/rateLimiter');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, auditLog } = require('../middleware/auth');
 const router = express.Router();
 
 const generateTokens = (userId) => {
@@ -43,14 +43,10 @@ router.post('/login', authLimiter,
 
       const user = result.rows[0];
       const valid = await bcrypt.compare(password, user.password_hash);
-
-      if (!valid) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
+      if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
       const { accessToken, refreshToken } = generateTokens(user.id);
 
-      // Store hashed refresh token
       const hash = await bcrypt.hash(refreshToken, 10);
       await query(
         `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
@@ -58,13 +54,25 @@ router.post('/login', authLimiter,
         [user.id, hash]
       );
 
-      // Update last login
-      await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
+      // Update last login + status to online + last_active
+      await query(
+        'UPDATE users SET last_login_at = NOW(), status = $1, last_active = NOW() WHERE id = $2',
+        ['online', user.id]
+      );
+
+      await auditLog(user.id, 'user.login', user.email, null, req.ip);
 
       res.json({
         accessToken,
         refreshToken,
-        user: { id: user.id, email: user.email, name: user.name, role: user.role },
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+          status: 'online',
+          avatar_url: user.avatar_url
+        },
       });
     } catch (err) { next(err); }
   }
@@ -78,13 +86,11 @@ router.post('/refresh', async (req, res, next) => {
   try {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
 
-    // Find non-revoked tokens for user
     const tokens = await query(
       `SELECT * FROM refresh_tokens WHERE user_id = $1 AND revoked = false AND expires_at > NOW()`,
       [decoded.userId]
     );
 
-    // Verify one of the stored tokens matches
     let validToken = null;
     for (const row of tokens.rows) {
       if (await bcrypt.compare(refreshToken, row.token_hash)) {
@@ -95,7 +101,6 @@ router.post('/refresh', async (req, res, next) => {
 
     if (!validToken) return res.status(401).json({ error: 'Invalid or expired refresh token' });
 
-    // Rotate: revoke old, issue new
     await query('UPDATE refresh_tokens SET revoked = true WHERE id = $1', [validToken.id]);
     const { accessToken, refreshToken: newRefreshToken } = generateTokens(decoded.userId);
     const hash = await bcrypt.hash(newRefreshToken, 10);
@@ -115,10 +120,9 @@ router.post('/refresh', async (req, res, next) => {
 // POST /api/auth/logout
 router.post('/logout', authenticateToken, async (req, res, next) => {
   try {
-    await query(
-      'UPDATE refresh_tokens SET revoked = true WHERE user_id = $1',
-      [req.user.id]
-    );
+    await query('UPDATE refresh_tokens SET revoked = true WHERE user_id = $1', [req.user.id]);
+    await query('UPDATE users SET status = $1 WHERE id = $2', ['offline', req.user.id]);
+    await auditLog(req.user.id, 'user.logout', req.user.email, null, req.ip);
     res.json({ message: 'Logged out successfully' });
   } catch (err) { next(err); }
 });

@@ -1,52 +1,78 @@
 import React, { useEffect } from 'react';
-import { useAuthStore, useConversationStore, useMessageStore } from '../store';
+import { useAuthStore, useConversationStore, useMessageStore, useTeamStore } from '../store';
 import { useSocket, joinConversationRoom, leaveConversationRoom } from '../hooks/useSocket';
 import Sidebar from '../components/layout/Sidebar';
 import ConversationList from '../components/chat/ConversationList';
 import ChatWindow from '../components/chat/ChatWindow';
-import EmptyState from '../components/chat/EmptyState';
+import { EmptyState } from '../components/chat/EmptyState';
+import TemplatesPage from './TemplatesPage';
+import TeamPage from './TeamPage';
+import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
-  const user                = useAuthStore((s) => s.user);
+  const user = useAuthStore(s => s.user);
   const { conversations, activeConversation, setActiveConversation, fetchConversations } = useConversationStore();
-  const { fetchMessages }   = useMessageStore();
+  const { fetchMessages } = useMessageStore();
+  const { fetchQueue } = useTeamStore();
+  const [activeTab, setActiveTab] = React.useState('chats');
 
-  useSocket(user);
+  const socket = useSocket(user);
 
   useEffect(() => {
     fetchConversations({ status: 'open' });
+    fetchQueue();
   }, []);
 
-  const handleSelectConversation = async (conv) => {
-    // Leave previous room
+  // Real-time queue notification
+  useEffect(() => {
+    if (!socket) return;
+    const handler = (data) => {
+      fetchQueue();
+      toast((t) => (
+        <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+          <span>📨 New conversation from <strong>{data.contactName}</strong></span>
+          <button onClick={() => { setActiveTab('team'); toast.dismiss(t.id); }}
+            style={{background:'#00a884',color:'white',border:'none',borderRadius:'6px',padding:'4px 10px',cursor:'pointer',fontSize:'12px'}}>
+            View
+          </button>
+        </div>
+      ), { duration: 6000 });
+    };
+    socket.on('queue_new_conversation', handler);
+    return () => socket.off('queue_new_conversation', handler);
+  }, [socket]);
+
+  const handleSelect = async (conv) => {
     if (activeConversation) leaveConversationRoom(activeConversation.id);
-
     setActiveConversation(conv);
-
-    // Join new room + load messages
     joinConversationRoom(conv.id);
     fetchMessages(conv.id);
   };
 
+  const renderMain = () => {
+    if (activeTab === 'templates') return <TemplatesPage />;
+    if (activeTab === 'team') return <TeamPage />;
+    return activeConversation ? <ChatWindow conversation={activeConversation} /> : <EmptyState />;
+  };
+
   return (
-    <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
-      {/* Left sidebar */}
-      <Sidebar />
-
-      {/* Conversation list */}
-      <ConversationList
-        conversations={conversations}
-        activeId={activeConversation?.id}
-        onSelect={handleSelectConversation}
-      />
-
-      {/* Chat window */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {activeConversation
-          ? <ChatWindow conversation={activeConversation} />
-          : <EmptyState />
-        }
+    <div style={s.root}>
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      {activeTab !== 'team' && (
+        <ConversationList
+          conversations={conversations}
+          activeId={activeConversation?.id}
+          onSelect={handleSelect}
+        />
+      )}
+      <div style={s.main}>
+        {renderMain()}
       </div>
     </div>
   );
 }
+
+const s = {
+  root:{ display:'flex', height:'100vh', background:'#0b0e14', overflow:'hidden', color:'#e2e8f0' },
+  main:{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' },
+};

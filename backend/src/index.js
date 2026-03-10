@@ -41,6 +41,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Raw body parser for webhook signature verification (must be before express.json)
 app.use('/webhook', express.raw({ type: 'application/json' }));
+app.use('/uploads', require('express').static('/app/uploads'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -63,6 +64,12 @@ app.use('/api/auth',          authRoutes);              // Login/refresh (public
 app.use('/api/conversations', authenticateToken, convRoutes);
 app.use('/api/messages',      authenticateToken, messageRoutes);
 app.use('/api/contacts',      authenticateToken, contactRoutes);
+app.use('/api/media',         authenticateToken, require('./routes/media'));
+app.use('/api/messages/send-media', authenticateToken, require('./routes/sendmedia'));
+app.use('/api/messages/send-template', authenticateToken, require('./routes/sendtemplate'));
+app.use('/api/team', require('./routes/team'));
+app.use('/api/templates', authenticateToken, require('./routes/templates'));
+app.use('/api/messages/send-sticker', authenticateToken, require('./routes/sendsticker'));
 
 // ── Error Handler ────────────────────────────────────────────
 app.use(errorHandler);

@@ -1,6 +1,7 @@
 const { query, withTransaction } = require('../config/database');
 const whatsappService = require('./whatsappService');
 const n8nService      = require('./n8nService');
+const { notifyQueue } = require('./queueService');
 
 /**
  * Main entry point for all Meta webhook events
@@ -79,7 +80,13 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
         [contact.id]
       );
     }
+    const isNewConversation = convResult.rows.length === 0;
     const conversation = convResult.rows[0];
+
+    // Notify agents if new conversation
+    if (isNewConversation) {
+      setImmediate(() => notifyQueue(io, conversation, contact).catch(console.error));
+    }
 
     // Store message
     const msgResult = await client.query(

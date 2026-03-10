@@ -1,32 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;overflow:hidden}
+body{font-family:'Urbanist',sans-serif;background:#070b11;color:#edf2f8;font-size:13px;-webkit-font-smoothing:antialiased}
 
-html, body, #root {
-  height: 100%;
-  overflow: hidden;
-}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#1a2e42;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#3a5068}
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  background: #030712;
-  color: white;
-}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes slideRight{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes ping{0%{transform:scale(1);opacity:.8}100%{transform:scale(2);opacity:0}}
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #374151; border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: #4b5563; }
-
-/* Textarea auto-resize */
-textarea {
-  field-sizing: content;
-}
+.msg-appear{animation:fadeUp .2s ease forwards}
+.conv-appear{animation:slideRight .15s ease forwards}
+input,textarea,button{font-family:inherit}
+textarea{resize:none}

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import api from '../services/api';
 
-// ── Auth Store ────────────────────────────────────────────────
+// Auth Store
 export const useAuthStore = create((set) => ({
   user:    JSON.parse(localStorage.getItem('user') || 'null'),
   loading: false,
@@ -30,8 +30,8 @@ export const useAuthStore = create((set) => ({
   },
 }));
 
-// ── Conversations Store ───────────────────────────────────────
-export const useConversationStore = create((set, get) => ({
+// Conversations Store
+export const useConversationStore = create((set) => ({
   conversations:      [],
   activeConversation: null,
   loading:            false,
@@ -42,15 +42,12 @@ export const useConversationStore = create((set, get) => ({
     try {
       const res = await api.get('/api/conversations', { params: { limit: 30, ...params } });
       set({ conversations: res.data.conversations, total: res.data.total, loading: false });
-    } catch {
-      set({ loading: false });
-    }
+    } catch { set({ loading: false }); }
   },
 
   setActiveConversation: async (conv) => {
     set({ activeConversation: conv });
     if (conv) {
-      // Mark as read
       await api.get(`/api/conversations/${conv.id}`).catch(() => {});
       set((s) => ({
         conversations: s.conversations.map((c) =>
@@ -81,25 +78,21 @@ export const useConversationStore = create((set, get) => ({
     }));
   },
 
-  // Called by socket events
   upsertConversation: (conv) => {
     set((s) => {
       const idx = s.conversations.findIndex((c) => c.id === conv.id);
-      if (idx === -1) {
-        return { conversations: [conv, ...s.conversations] };
-      }
+      if (idx === -1) return { conversations: [conv, ...s.conversations] };
       const updated = [...s.conversations];
       updated[idx] = { ...updated[idx], ...conv };
-      // Re-sort by last message
       updated.sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
       return { conversations: updated };
     });
   },
 }));
 
-// ── Messages Store ────────────────────────────────────────────
-export const useMessageStore = create((set, get) => ({
-  messagesByConv: {}, // { [convId]: Message[] }
+// Messages Store
+export const useMessageStore = create((set) => ({
+  messagesByConv: {},
   loading:        false,
   sending:        false,
 
@@ -111,9 +104,7 @@ export const useMessageStore = create((set, get) => ({
         messagesByConv: { ...s.messagesByConv, [conversationId]: res.data.messages },
         loading: false,
       }));
-    } catch {
-      set({ loading: false });
-    }
+    } catch { set({ loading: false }); }
   },
 
   sendMessage: async (conversationId, text) => {
@@ -157,5 +148,56 @@ export const useMessageStore = create((set, get) => ({
         },
       };
     });
+  },
+}));
+
+// Team Store
+export const useTeamStore = create((set) => ({
+  team:    [],
+  queue:   [],
+  loading: false,
+
+  fetchTeam: async () => {
+    set({ loading: true });
+    try {
+      const res = await api.get('/api/team');
+      set({ team: res.data.team, loading: false });
+    } catch { set({ loading: false }); }
+  },
+
+  fetchQueue: async () => {
+    try {
+      const res = await api.get('/api/conversations/queue/list');
+      set({ queue: res.data.queue });
+    } catch {}
+  },
+
+  inviteMember: async (email, role) => {
+    const res = await api.post('/api/team/invite', { email, role });
+    return res.data;
+  },
+
+  changeRole: async (userId, role) => {
+    await api.patch(`/api/team/${userId}/role`, { role });
+    set((s) => ({ team: s.team.map((m) => m.id === userId ? { ...m, role } : m) }));
+  },
+
+  deactivateMember: async (userId) => {
+    await api.delete(`/api/team/${userId}`);
+    set((s) => ({ team: s.team.filter((m) => m.id !== userId) }));
+  },
+
+  claimConversation: async (convId) => {
+    await api.post(`/api/conversations/${convId}/claim`);
+    set((s) => ({ queue: s.queue.filter((c) => c.id !== convId) }));
+  },
+
+  assignConversation: async (convId, agentId) => {
+    await api.post(`/api/conversations/${convId}/assign`, { agent_id: agentId });
+    set((s) => ({ queue: s.queue.filter((c) => c.id !== convId) }));
+  },
+
+  updateMyStatus: async (userId, status) => {
+    await api.patch(`/api/team/${userId}/status`, { status });
   },
 }));

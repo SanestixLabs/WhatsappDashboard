@@ -123,4 +123,99 @@ router.patch('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+router.get('/:id/contact', async (req, res, next) => {
+  try {
+    const result = await query(
+      'SELECT ct.* FROM contacts ct JOIN conversations conv ON conv.contact_id=ct.id WHERE conv.id=$1',
+      [req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Contact not found' });
+    res.json(result.rows[0]);
+  } catch(err) { next(err); }
+});
+
 module.exports = router;
+
+// POST /api/conversations/:id/claim — agent claims a queued conversation
+router.post('/:id/claim', async (req, res, next) => {
+  try {
+    const result = await query(
+      `UPDATE conversations 
+       SET assigned_to = $1, updated_at = NOW()
+       WHERE id = $2 AND assigned_to IS NULL
+       RETURNING *`,
+      [req.user?.id, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(409).json({ error: 'Conversation already claimed or not found' });
+    }
+
+    req.app.get('io').emit('conversation_claimed', {
+      conversationId: req.params.id,
+      agentId: req.user?.id,
+    });
+
+    res.json({ message: 'Conversation claimed', conversation: result.rows[0] });
+  } catch (err) { next(err); }
+});
+
+// POST /api/conversations/:id/assign — admin assigns to specific agent
+router.post('/:id/assign', async (req, res, next) => {
+  try {
+    const { agent_id } = req.body;
+    if (!agent_id) return res.status(400).json({ error: 'agent_id required' });
+
+    // Verify agent exists and is active
+    const agentCheck = await query(
+      `SELECT id, name FROM users WHERE id = $1 AND is_active = true AND role IN ('admin', 'agent')`,
+      [agent_id]
+    );
+    if (agentCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Agent not found or inactive' });
+    }
+
+    const result = await query(
+      `UPDATE conversations 
+       SET assigned_to = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [agent_id, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    req.app.get('io').emit('conversation_assigned', {
+      conversationId: req.params.id,
+      agentId: agent_id,
+      agentName: agentCheck.rows[0].name,
+    });
+
+    res.json({ message: 'Conversation assigned', conversation: result.rows[0] });
+  } catch (err) { next(err); }
+});
+
+// GET /api/conversations/queue — get all unassigned open conversations
+router.get('/queue/list', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT
+         conv.id,
+         conv.status,
+         conv.unread_count,
+         conv.last_message_at,
+         conv.created_at,
+         ct.phone_number,
+         ct.name AS contact_name,
+         ct.profile_pic_url
+       FROM conversations conv
+       JOIN contacts ct ON ct.id = conv.contact_id
+       WHERE conv.assigned_to IS NULL AND conv.status = 'open'
+       ORDER BY conv.last_message_at DESC NULLS LAST`
+    );
+    res.json({ queue: result.rows, total: result.rows.length });
+  } catch (err) { next(err); }
+});
