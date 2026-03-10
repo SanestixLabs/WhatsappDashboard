@@ -55,19 +55,22 @@ export default function DashboardPage() {
     return activeConversation ? <ChatWindow conversation={activeConversation} /> : <EmptyState />;
   };
 
+  const isMobile = window.innerWidth <= 768;
+
   return (
-    <div style={s.root}>
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
-      {activeTab !== 'team' && (
+    <div style={{display:'flex', height:'100vh', background:'#0b0e14', overflow:'hidden', color:'#e2e8f0', flexDirection:'row'}}>
+      {!isMobile && <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />}
+      {(!isMobile || (isMobile && activeTab === 'chats' && !activeConversation)) && activeTab !== 'team' && activeTab !== 'templates' && (
         <ConversationList
           conversations={conversations}
           activeId={activeConversation?.id}
           onSelect={handleSelect}
         />
       )}
-      <div style={s.main}>
+      <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', paddingBottom: isMobile ? '64px' : '0'}}>
         {renderMain()}
       </div>
+      {isMobile && <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />}
     </div>
   );
 }

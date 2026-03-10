@@ -55,8 +55,20 @@ router.post('/invite', authenticateToken, requireRole('super_admin', 'admin'),
 
       await auditLog(req.user.id, 'invite.sent', email, { role }, req.ip);
 
-      // TODO: Send email via Resend in next step
-      const inviteUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
+            const inviteUrl = `${process.env.FRONTEND_URL}/accept-invite?token=${token}`;
+      const nodemailer = require('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT),
+        secure: false,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      });
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM,
+        to: email,
+        subject: 'You are invited to join Sanestix Flow',
+        html: `<h2>You have been invited</h2><p>Click the link below to join as <b>${role}</b>:</p><a href="${inviteUrl}" style="background:#00d4b8;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;margin-top:10px">Accept Invite</a><p style="color:#999;margin-top:16px">This link expires in 48 hours.</p>`
+      });
 
       res.json({
         message: 'Invite created successfully',

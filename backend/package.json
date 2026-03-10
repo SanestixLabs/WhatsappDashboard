@@ -1,7 +1,7 @@
 {
   "name": "sanestix-flow-backend",
   "version": "1.0.0",
-  "description": "Sanestix Flow — WhatsApp Automation Backend",
+  "description": "Sanestix Flow \u2014 WhatsApp Automation Backend",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -24,7 +24,8 @@
     "uuid": "^10.0.0",
     "multer": "^1.4.5-lts.1",
     "form-data": "^4.0.0",
-    "crypto": "^1.0.1"
+    "crypto": "^1.0.1",
+    "nodemailer": "^6.9.9"
   },
   "devDependencies": {
     "nodemon": "^3.1.3",
