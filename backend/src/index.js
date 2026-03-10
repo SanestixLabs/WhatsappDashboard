@@ -71,6 +71,9 @@ app.use('/api/team', require('./routes/team'));
 app.use('/api/templates', authenticateToken, require('./routes/templates'));
 app.use('/api/messages/send-sticker', authenticateToken, require('./routes/sendsticker'));
 
+app.use('/api/notes',  authenticateToken, require('./routes/notes'));
+app.use('/api/canned', authenticateToken, require('./routes/canned'));
+
 // ── Error Handler ────────────────────────────────────────────
 app.use(errorHandler);
 
