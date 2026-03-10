@@ -1,3 +1,4 @@
+import { socketInstance } from '../../hooks/useSocket';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import ContactPanel from './ContactPanel';
@@ -19,6 +20,18 @@ export default function ChatWindow({ conversation }) {
   const [attachment, setAttachment]   = useState(null);
   const [sending, setSending]         = useState(false);
   const [showProfile, setShowProfile]   = useState(false);
+  const [showTransfer, setShowTransfer] = useState(false);
+  const [showNotes, setShowNotes]       = useState(false);
+  const [agents, setAgents]             = useState([]);
+  const [transferNote, setTransferNote] = useState('');
+  const [transferTarget, setTransferTarget] = useState('');
+  const [transferring, setTransferring] = useState(false);
+  const [notes, setNotes]               = useState([]);
+  const [noteText, setNoteText]         = useState('');
+  const [addingNote, setAddingNote]     = useState(false);
+  const [showCanned, setShowCanned]     = useState(false);
+  const [cannedList, setCannedList]     = useState([]);
+  const [cannedSearch, setCannedSearch] = useState('');
 
   // ── Voice recording state ──────────────────────────────────
   const [recording, setRecording]         = useState(false);
@@ -43,7 +56,35 @@ export default function ChatWindow({ conversation }) {
     setAttachment(null);
     setAudioBlob(null);
     stopRecording();
+    setNotes([]);
+    setShowNotes(false);
   }, [conversation.id]);
+
+  // Realtime notes via socket
+  useEffect(() => {
+    const handler = (data) => {
+      if (data.conversationId === conversation.id) {
+        setNotes(prev => {
+          const exists = prev.find(n => n.id === data.note.id);
+          if (exists) return prev;
+          return [...prev, data.note];
+        });
+        // If notes panel is closed, show a toast hint
+        if (!showNotes) {
+          import('react-hot-toast').then(({default: toast}) => {
+            toast('🔒 New internal note added', {
+              duration: 3000,
+              style: { background: '#1a1f2e', color: '#e2e8f0', border: '1px solid rgba(245,158,11,0.3)' },
+            });
+          });
+        }
+      }
+    };
+    if (socketInstance) {
+      socketInstance.on('new_note', handler);
+      return () => socketInstance.off('new_note', handler);
+    }
+  }, [conversation.id, showNotes]);
 
   // ── Voice recording functions ──────────────────────────────
   const startRecording = async () => {
@@ -112,6 +153,68 @@ export default function ChatWindow({ conversation }) {
   };
 
   const fmtSecs = s => `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+
+  // ── Load agents for transfer ──────────────────────────────
+  const openTransfer = async () => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/team', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json();
+    setAgents(data.team || data.agents || data || []);
+    setShowTransfer(true);
+  };
+
+  const doTransfer = async () => {
+    if (!transferTarget) return;
+    setTransferring(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/conversations/' + conversation.id + '/transfer', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: transferTarget, note: transferNote })
+      });
+      if (res.ok) { setShowTransfer(false); setTransferNote(''); setTransferTarget(''); }
+      else { const e = await res.json(); alert(e.error || 'Transfer failed'); }
+    } finally { setTransferring(false); }
+  };
+
+  // ── Load notes ─────────────────────────────────────────────
+  const openNotes = async () => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/notes/' + conversation.id, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json();
+    setNotes(data.notes || []);
+    setShowNotes(true);
+  };
+
+  const addNote = async () => {
+    if (!noteText.trim()) return;
+    setAddingNote(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/notes/' + conversation.id, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: noteText })
+      });
+      if (res.ok) { const d = await res.json(); setNotes(n => [...n, d.note]); setNoteText(''); }
+    } finally { setAddingNote(false); }
+  };
+
+  // ── Load canned responses ──────────────────────────────────
+  const openCanned = async (q = '') => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/canned?q=' + encodeURIComponent(q), {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const data = await res.json();
+    setCannedList(data.canned || []);
+    setShowCanned(true);
+  };
 
   // ── Regular send ───────────────────────────────────────────
   const handleSend = async () => {
@@ -244,6 +347,8 @@ export default function ChatWindow({ conversation }) {
         </div>
         <div style={s.actions}>
           <HdrBtn title="Search" onClick={()=>{setShowSearch(v=>!v);setSearchQuery('');setTimeout(()=>searchRef.current?.focus(),100);}}><SearchIcon/></HdrBtn>
+          <HdrBtn title="Internal Notes" onClick={openNotes}><NotesIcon/></HdrBtn>
+          <HdrBtn title="Transfer Chat" onClick={openTransfer}><TransferIcon/></HdrBtn>
           <HdrBtn title="Contact info" onClick={()=>setShowProfile(v=>!v)}><ContactIcon/></HdrBtn>
           <HdrBtn title="Close" onClick={()=>closeConversation(conversation.id)}><MoreIcon/></HdrBtn>
         </div>
@@ -367,11 +472,15 @@ export default function ChatWindow({ conversation }) {
               <button style={s.toolBtn} title="Attach file" onClick={()=>fileRef.current?.click()} disabled={isExpired||!!audioBlob}>
                 <AttachIcon/>
               </button>
+              <button style={{...s.toolBtn, fontSize:'11px', fontWeight:'700', color:'#00d4b8', letterSpacing:'-0.5px'}}
+                title="Canned Responses (or type /)" onClick={()=>{ setCannedSearch(''); openCanned(''); }}>
+                /
+              </button>
               <div style={s.inputWrap}
                 onFocus={e=>e.currentTarget.style.borderColor='#00d4b8'}
                 onBlur={e=>e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'}>
                 <textarea ref={inputRef} value={text}
-                  onChange={e=>{setText(e.target.value);autoResize(e);}}
+                  onChange={e=>{ const v=e.target.value; setText(v); autoResize(e); if(v=='/'){setCannedSearch('');openCanned('');} else if(v.startsWith('/')&&v.length>1){setCannedSearch(v.slice(1));openCanned(v.slice(1));} else {setShowCanned(false);} }}
                   onKeyDown={handleKey} disabled={isExpired||!!attachment||!!audioBlob} rows={1}
                   placeholder={isExpired?'Session expired…':attachment?'File ready to send…':audioBlob?'Voice message ready…':'Type a message…'}
                   style={{...s.textarea,opacity:isExpired?.4:1,cursor:isExpired?'not-allowed':'text'}}/>
@@ -424,6 +533,86 @@ export default function ChatWindow({ conversation }) {
       `}</style>
     </div>
     {showProfile && <ContactPanel conversation={conversation} onClose={()=>setShowProfile(false)}/>}
+
+    {/* ── Transfer Modal ── */}
+    {showTransfer && (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+        <div style={{background:'#0c1219',borderRadius:'16px',border:'1px solid rgba(255,255,255,0.1)',width:'420px',padding:'24px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'18px'}}>
+            <span style={{fontSize:'15px',fontWeight:'700',color:'#e9edef'}}>Transfer Conversation</span>
+            <button onClick={()=>setShowTransfer(false)} style={{background:'none',border:'none',color:'#536471',cursor:'pointer',fontSize:'18px'}}>✕</button>
+          </div>
+          <div style={{marginBottom:'14px'}}>
+            <div style={{fontSize:'11px',color:'#536471',marginBottom:'6px',fontWeight:'600'}}>TRANSFER TO AGENT</div>
+            <select value={transferTarget} onChange={e=>setTransferTarget(e.target.value)}
+              style={{width:'100%',background:'#202c33',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'8px',padding:'9px 12px',color:'#e9edef',fontSize:'13px',outline:'none'}}>
+              <option value=''>Select agent...</option>
+              {agents.map(a=><option key={a.id} value={a.id}>{a.name} ({a.status||'offline'})</option>)}
+            </select>
+          </div>
+          <div style={{marginBottom:'18px'}}>
+            <div style={{fontSize:'11px',color:'#536471',marginBottom:'6px',fontWeight:'600'}}>HANDOFF NOTE (optional)</div>
+            <textarea value={transferNote} onChange={e=>setTransferNote(e.target.value)} rows={3}
+              placeholder="Add context for the receiving agent..."
+              style={{width:'100%',background:'#202c33',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'8px',padding:'9px 12px',color:'#e9edef',fontSize:'13px',outline:'none',resize:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div style={{display:'flex',gap:'10px',justifyContent:'flex-end'}}>
+            <button onClick={()=>setShowTransfer(false)} style={{padding:'9px 18px',background:'transparent',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'8px',color:'#8696a0',fontSize:'13px',cursor:'pointer'}}>Cancel</button>
+            <button onClick={doTransfer} disabled={!transferTarget||transferring}
+              style={{padding:'9px 18px',background:transferTarget?'linear-gradient(135deg,#00d4b8,#00b8a0)':'#1a2e42',border:'none',borderRadius:'8px',color:transferTarget?'#070b11':'#3a5068',fontSize:'13px',fontWeight:'700',cursor:transferTarget?'pointer':'not-allowed'}}>
+              {transferring?'Transferring...':'Transfer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Notes Panel ── */}
+    {showNotes && (
+      <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
+        <div style={{background:'#0c1219',borderRadius:'16px',border:'1px solid rgba(255,255,255,0.1)',width:'480px',maxHeight:'70vh',display:'flex',flexDirection:'column'}}>
+          <div style={{padding:'18px 22px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:'15px',fontWeight:'700',color:'#e9edef'}}>🔒 Internal Notes</span>
+            <button onClick={()=>setShowNotes(false)} style={{background:'none',border:'none',color:'#536471',cursor:'pointer',fontSize:'18px'}}>✕</button>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:'16px',display:'flex',flexDirection:'column',gap:'10px'}}>
+            {notes.length===0 && <div style={{textAlign:'center',color:'#536471',padding:'30px',fontSize:'13px'}}>No notes yet. Add one below.</div>}
+            {notes.map(n=>(
+              <div key={n.id} style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'10px',padding:'12px 14px'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px'}}>
+                  <span style={{fontSize:'11px',fontWeight:'700',color:'#f59e0b'}}>{n.author_name}</span>
+                  <span style={{fontSize:'10px',color:'#536471'}}>{new Date(n.created_at).toLocaleString()}</span>
+                </div>
+                <div style={{fontSize:'13px',color:'#e9edef',lineHeight:'1.5'}}>{n.content}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{padding:'14px 22px',borderTop:'1px solid rgba(255,255,255,0.07)',display:'flex',gap:'10px'}}>
+            <textarea value={noteText} onChange={e=>setNoteText(e.target.value)} rows={2}
+              placeholder="Add internal note (not visible to customer)..."
+              style={{flex:1,background:'#202c33',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'8px',padding:'9px 12px',color:'#e9edef',fontSize:'13px',outline:'none',resize:'none'}}/>
+            <button onClick={addNote} disabled={!noteText.trim()||addingNote}
+              style={{padding:'9px 16px',background:'rgba(245,158,11,0.15)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:'8px',color:'#f59e0b',fontSize:'13px',fontWeight:'700',cursor:'pointer',alignSelf:'flex-end'}}>
+              {addingNote?'...':'Add'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Canned Responses Picker ── */}
+    {showCanned && cannedList.length > 0 && (
+      <div style={{position:'absolute',bottom:'130px',left:'18px',right:'18px',background:'#101924',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'14px',padding:'8px',zIndex:100,boxShadow:'0 8px 32px rgba(0,0,0,.4)',maxHeight:'220px',overflowY:'auto'}}>
+        <div style={{fontSize:'10px',color:'#536471',padding:'4px 8px 8px',fontWeight:'600'}}>CANNED RESPONSES — press / to search</div>
+        {cannedList.map(c=>(
+          <button key={c.id} onClick={()=>{setText(c.content);setShowCanned(false);inputRef.current?.focus();}}
+            style={{width:'100%',background:'transparent',border:'none',borderRadius:'8px',padding:'8px 10px',textAlign:'left',cursor:'pointer',display:'flex',gap:'10px',alignItems:'flex-start'}}>
+            <span style={{fontSize:'11px',fontWeight:'700',color:'#00d4b8',background:'rgba(0,212,184,0.1)',padding:'2px 8px',borderRadius:'4px',flexShrink:0,fontFamily:"'JetBrains Mono',monospace"}}>/{c.shortcut}</span>
+            <span style={{fontSize:'12px',color:'#8696a0',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{c.content}</span>
+          </button>
+        ))}
+      </div>
+    )}
     </>
   );
 }
@@ -613,6 +802,8 @@ const TickIcon=({status})=>{
   return <svg width="14" height="10" viewBox="0 0 14 11" fill="none"><path d="M1 5L5 9L13 1" stroke="rgba(255,255,255,.3)" strokeWidth="2" strokeLinecap="round"/></svg>;
 };
 const HdrBtn=({children,onClick,title})=><button onClick={onClick} title={title} style={s.hdrBtn}>{children}</button>;
+const NotesIcon=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+const TransferIcon=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>;
 const SearchIcon   = ()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>;
 const ContactIcon  = ()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 const MoreIcon     = ()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>;

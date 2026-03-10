@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { useConversationStore, useMessageStore } from '../store';
 import toast from 'react-hot-toast';
 
-let socketInstance = null;
+export let socketInstance = null;
 
 export const useSocket = (user) => {
   const socketRef = useRef(null);

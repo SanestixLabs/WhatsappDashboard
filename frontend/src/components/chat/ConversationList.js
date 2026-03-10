@@ -44,9 +44,23 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
     } finally { setSending(false); }
   };
   const [filter, setFilter] = useState('open');
+  const [queueItems, setQueueItems] = useState([]);
   const { fetchConversations, total } = useConversationStore();
 
-  const handleFilter = (f) => { setFilter(f); fetchConversations({ status: f }); };
+  const handleFilter = async (f) => {
+    setFilter(f);
+    if (f === 'queue') {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/conversations/queue/list', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      const data = await res.json();
+      setQueueItems(data.queue || []);
+    } else {
+      setQueueItems([]);
+      fetchConversations({ status: f });
+    }
+  };
 
   const getName = (conv) => conv.contact_name || conv.phone_number;
   const getInitials = (conv) => {
@@ -54,9 +68,10 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
     return conv.phone_number?.slice(-2);
   };
 
+  const sourceList = filter === 'queue' ? queueItems : conversations;
   const filtered = search
-    ? conversations.filter(c => getName(c)?.toLowerCase().includes(search.toLowerCase()) || c.phone_number?.includes(search))
-    : conversations;
+    ? sourceList.filter(c => getName(c)?.toLowerCase().includes(search.toLowerCase()) || c.phone_number?.includes(search))
+    : sourceList;
 
   const avatarColors = [
     'linear-gradient(135deg,#6366f1,#8b5cf6)',
@@ -86,6 +101,7 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
 
   const filterTabs = [
     { key:'open', label:'Open' },
+    { key:'queue', label:'Queue' },
     { key:'pending', label:'Pending' },
     { key:'closed', label:'Closed' },
   ];
@@ -159,13 +175,30 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
                     )}
                   </div>
                 </div>
-                <div style={{marginTop:'3px'}}>
+                <div style={{marginTop:'3px',display:'flex',alignItems:'center',gap:'6px'}}>
                   {conv.automation_enabled
                     ? <span style={s.aiChip}>AI</span>
                     : conv.status === 'pending'
                       ? <span style={s.waitChip}>Waiting</span>
                       : null
                   }
+                  {filter === 'queue' && (
+                    <button onClick={async (e) => {
+                      e.stopPropagation();
+                      const token = localStorage.getItem('accessToken');
+                      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/conversations/' + conv.id + '/claim', {
+                        method: 'POST',
+                        headers: { Authorization: 'Bearer ' + token }
+                      });
+                      if (res.ok) { 
+                        setQueueItems(prev => prev.filter(q => q.id !== conv.id));
+                      }
+                      else { alert('Already claimed'); }
+                    }} style={{fontSize:'9px',padding:'2px 8px',borderRadius:'4px',fontWeight:'700',
+                      background:'rgba(0,212,184,.15)',color:'#00d4b8',border:'1px solid rgba(0,212,184,.3)',cursor:'pointer'}}>
+                      Claim
+                    </button>
+                  )}
                 </div>
               </div>
             </button>

@@ -78,6 +78,10 @@ export const useConversationStore = create((set) => ({
     }));
   },
 
+  setConversations: (convs) => {
+    set({ conversations: convs, total: convs.length });
+  },
+
   upsertConversation: (conv) => {
     set((s) => {
       const idx = s.conversations.findIndex((c) => c.id === conv.id);
