@@ -229,6 +229,8 @@ const triggerN8n = async (message, conversation, contact, settings, io) => {
 
 const handleStatusUpdate = async (statusUpdate, io) => {
   const { id: waMessageId, status, timestamp } = statusUpdate;
+
+  // Update messages table
   const result = await query(
     `UPDATE messages SET status = $1 WHERE wa_message_id = $2 RETURNING id, conversation_id`,
     [status, waMessageId]
@@ -236,6 +238,37 @@ const handleStatusUpdate = async (statusUpdate, io) => {
   if (result.rows.length > 0) {
     const { id, conversation_id } = result.rows[0];
     io.emit('message_status_update', { messageId: id, conversationId: conversation_id, status });
+  }
+
+  // Update broadcast_recipients table
+  const validBroadcastStatus = ['sent', 'delivered', 'read', 'failed'];
+  if (validBroadcastStatus.includes(status)) {
+    const brResult = await query(
+      `UPDATE broadcast_recipients SET status=$1 WHERE wa_message_id=$2 RETURNING broadcast_id`,
+      [status, waMessageId]
+    );
+    if (brResult.rows.length > 0) {
+      const broadcastId = brResult.rows[0].broadcast_id;
+      // Recalculate broadcast counters
+      const counts = await query(
+        `SELECT
+          COUNT(*) FILTER (WHERE status='sent') as sent_count,
+          COUNT(*) FILTER (WHERE status='delivered') as delivered_count,
+          COUNT(*) FILTER (WHERE status='read') as read_count,
+          COUNT(*) FILTER (WHERE status='failed') as failed_count,
+          COUNT(*) as total_count
+         FROM broadcast_recipients WHERE broadcast_id=$1`,
+        [broadcastId]
+      );
+      const c = counts.rows[0];
+      await query(
+        `UPDATE broadcasts SET
+          sent_count=$1, delivered_count=$2, read_count=$3, failed_count=$4
+         WHERE id=$5`,
+        [c.sent_count, c.delivered_count, c.read_count, c.failed_count, broadcastId]
+      );
+      io.emit('broadcast_stats_update', { broadcastId, ...c });
+    }
   }
 };
 
