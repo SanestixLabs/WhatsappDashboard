@@ -163,6 +163,35 @@ async function processBroadcast(broadcast, contacts) {
         `UPDATE broadcast_recipients SET status='sent', wa_message_id=$1, sent_at=NOW() WHERE broadcast_id=$2 AND contact_id=$3`,
         [waId, broadcast.id, contact.id]
       );
+
+      // Get or create conversation for this contact
+      let convId;
+      const existingConv = await query(
+        `SELECT id FROM conversations WHERE contact_id=$1 ORDER BY created_at DESC LIMIT 1`,
+        [contact.id]
+      );
+      if (existingConv.rows.length) {
+        convId = existingConv.rows[0].id;
+        await query(`UPDATE conversations SET status='open', last_message_at=NOW(), updated_at=NOW() WHERE id=$1`, [convId]);
+      } else {
+        const newConv = await query(
+          `INSERT INTO conversations (contact_id, status, session_expires_at, last_message_at)
+           VALUES ($1, 'open', NOW() + INTERVAL '24 hours', NOW()) RETURNING id`,
+          [contact.id]
+        );
+        convId = newConv.rows[0].id;
+      }
+
+      if (convId) {
+        const msgContent = broadcast.template_name + (broadcast.template_vars?.length ? ' [' + broadcast.template_vars.join(', ') + ']' : '');
+        await query(
+          `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, template_name, template_vars, status, sent_by)
+           VALUES ($1, $2, 'outgoing', 'template', $3, $4, $5, 'sent', $6)
+           ON CONFLICT (wa_message_id) DO NOTHING`,
+          [convId, waId || null, msgContent, broadcast.template_name, JSON.stringify(broadcast.template_vars || []), broadcast.created_by]
+        );
+      }
+
       sent++;
     } catch (err) {
       const errMsg = err.response?.data?.error?.message || err.message;
