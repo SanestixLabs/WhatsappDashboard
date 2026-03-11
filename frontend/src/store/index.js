@@ -188,7 +188,8 @@ export const useTeamStore = create((set) => ({
 
   deactivateMember: async (userId) => {
     await api.delete(`/api/team/${userId}`);
-    set((s) => ({ team: s.team.filter((m) => m.id !== userId) }));
+    const res = await api.get('/api/team');
+    set({ team: res.data.members || res.data });
   },
 
   claimConversation: async (convId) => {

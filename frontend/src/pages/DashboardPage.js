@@ -8,6 +8,9 @@ import { EmptyState } from '../components/chat/EmptyState';
 import TemplatesPage from './TemplatesPage';
 import SettingsPage from './SettingsPage';
 import TeamPage from './TeamPage';
+import AnalyticsPage from './AnalyticsPage';
+import ContactsPage from './ContactsPage';
+import BroadcastsPage from './BroadcastsPage';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
@@ -54,6 +57,9 @@ export default function DashboardPage() {
     if (activeTab === 'templates') return <TemplatesPage />;
     if (activeTab === 'settings') return <SettingsPage />;
     if (activeTab === 'team') return <TeamPage />;
+    if (activeTab === 'analytics') return <AnalyticsPage />;
+    if (activeTab === 'contacts') return <ContactsPage />;
+    if (activeTab === 'broadcasts') return <BroadcastsPage />;
     return activeConversation ? <ChatWindow conversation={activeConversation} /> : <EmptyState />;
   };
 
@@ -62,7 +68,7 @@ export default function DashboardPage() {
   return (
     <div style={{display:'flex', height:'100vh', background:'#0b0e14', overflow:'hidden', color:'#e2e8f0', flexDirection:'row'}}>
       {!isMobile && <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />}
-      {(!isMobile || (isMobile && activeTab === 'chats' && !activeConversation)) && activeTab !== 'team' && activeTab !== 'templates' && activeTab !== 'settings' && (
+      {(!isMobile || (isMobile && activeTab === 'chats' && !activeConversation)) && activeTab !== 'team' && activeTab !== 'templates' && activeTab !== 'settings' && activeTab !== 'contacts' && activeTab !== 'broadcasts' && (
         <ConversationList
           conversations={conversations}
           activeId={activeConversation?.id}

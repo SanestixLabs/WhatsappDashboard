@@ -11,7 +11,7 @@ router.get('/', authenticateToken, requireRole('super_admin', 'admin'), async (r
   try {
     const result = await query(
       `SELECT id, email, name, role, status, last_active, avatar_url, is_active, created_at
-       FROM users ORDER BY created_at ASC`
+       FROM users WHERE is_active = true ORDER BY created_at ASC`
     );
     res.json({ team: result.rows });
   } catch (err) { next(err); }
@@ -30,7 +30,7 @@ router.post('/invite', authenticateToken, requireRole('super_admin', 'admin'),
       const workspace_id = 'default';
 
       // Check if user already exists
-      const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+      const existing = await query('SELECT id FROM users WHERE email = $1 AND is_active = true', [email]);
       if (existing.rows.length > 0) {
         return res.status(409).json({ error: 'User with this email already exists' });
       }

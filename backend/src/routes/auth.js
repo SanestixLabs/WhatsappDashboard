@@ -22,7 +22,7 @@ const generateTokens = (userId) => {
 };
 
 // POST /api/auth/login
-router.post('/login', authLimiter,
+router.post('/login',
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   async (req, res, next) => {

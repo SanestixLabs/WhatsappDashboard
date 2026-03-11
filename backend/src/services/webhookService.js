@@ -3,11 +3,7 @@ const whatsappService = require('./whatsappService');
 const n8nService      = require('./n8nService');
 const { notifyQueue } = require('./queueService');
 
-/**
- * Main entry point for all Meta webhook events
- */
 const processWebhookEvent = async (body, io) => {
-  // Log raw event
   await query(
     'INSERT INTO webhook_events (event_type, raw_payload) VALUES ($1, $2)',
     [body.object, JSON.stringify(body)]
@@ -19,15 +15,11 @@ const processWebhookEvent = async (body, io) => {
     for (const change of entry.changes || []) {
       if (change.field !== 'messages') continue;
       const value = change.value;
-
-      // Handle incoming messages
       if (value.messages) {
         for (const msg of value.messages) {
           await handleIncomingMessage(msg, value.metadata, io);
         }
       }
-
-      // Handle status updates (sent/delivered/read)
       if (value.statuses) {
         for (const status of value.statuses) {
           await handleStatusUpdate(status, io);
@@ -37,25 +29,16 @@ const processWebhookEvent = async (body, io) => {
   }
 };
 
-/**
- * Process an incoming WhatsApp message
- */
 const handleIncomingMessage = async (waMsg, metadata, io) => {
-  const phoneNumber = waMsg.from; // E.164 format
+  const phoneNumber = waMsg.from;
   const waMessageId = waMsg.id;
 
-  // Deduplicate: skip if already processed
   const existing = await query('SELECT id FROM messages WHERE wa_message_id = $1', [waMessageId]);
-  if (existing.rows.length > 0) {
-    console.log(`[Webhook] Duplicate message ${waMessageId}, skipping`);
-    return;
-  }
+  if (existing.rows.length > 0) return;
 
-  // Extract message content
   const { type, content, mediaUrl } = extractMessageContent(waMsg);
 
   await withTransaction(async (client) => {
-    // Upsert contact
     const contactResult = await client.query(
       `INSERT INTO contacts (phone_number, name)
        VALUES ($1, $2)
@@ -67,28 +50,26 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
     );
     const contact = contactResult.rows[0];
 
-    // Get or create open conversation
     let convResult = await client.query(
       `SELECT * FROM conversations WHERE contact_id = $1 AND status = 'open' LIMIT 1`,
       [contact.id]
     );
 
+    let isNewConversation = false;
     if (convResult.rows.length === 0) {
+      isNewConversation = true;
       convResult = await client.query(
         `INSERT INTO conversations (contact_id, status, automation_enabled)
          VALUES ($1, 'open', true) RETURNING *`,
         [contact.id]
       );
     }
-    const isNewConversation = convResult.rows.length === 0;
     const conversation = convResult.rows[0];
 
-    // Notify agents if new conversation
     if (isNewConversation) {
       setImmediate(() => notifyQueue(io, conversation, contact).catch(console.error));
     }
 
-    // Store message
     const msgResult = await client.query(
       `INSERT INTO messages (conversation_id, wa_message_id, direction, type, content, media_url, status, timestamp)
        VALUES ($1, $2, 'incoming', $3, $4, $5, 'delivered', to_timestamp($6))
@@ -97,19 +78,13 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
     );
     const message = msgResult.rows[0];
 
-    // Mark webhook event as processed
     await client.query(
       `UPDATE webhook_events SET processed = true, processed_at = NOW()
        WHERE raw_payload->>'id' = $1`,
       [waMessageId]
     );
 
-    // Emit real-time update to dashboard
-    io.emit('new_message', {
-      message,
-      conversation: { ...conversation, contact },
-    });
-
+    io.emit('new_message', { message, conversation: { ...conversation, contact } });
     io.emit('conversation_updated', {
       conversationId: conversation.id,
       contactName: contact.name || phoneNumber,
@@ -117,36 +92,91 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
       timestamp: message.timestamp,
     });
 
-    // Trigger n8n if automation is enabled
-    if (conversation.automation_enabled && isWithin24HourWindow(conversation)) {
+    // ── Check if AI is paused for this conversation ──
+    const isPaused = conversation.ai_paused_until && new Date(conversation.ai_paused_until) > new Date();
+
+    if (conversation.automation_enabled && !isPaused && isWithin24HourWindow(conversation)) {
+      // ── Run intent + sentiment analysis ──
       setImmediate(() =>
-        triggerN8n(message, conversation, contact, io).catch(console.error)
+        runAnalysis(message, conversation, contact, io).catch(console.error)
       );
     }
   });
 };
 
-/**
- * Handle WhatsApp delivery/read status updates
- */
-const handleStatusUpdate = async (statusUpdate, io) => {
-  const { id: waMessageId, status, timestamp } = statusUpdate;
+const runAnalysis = async (message, conversation, contact, io) => {
+  try {
+    // Fetch AI settings from DB
+    const settingsRes = await query(`SELECT * FROM ai_settings WHERE workspace_id = 'default' LIMIT 1`);
+    const settings = settingsRes.rows[0];
 
-  const result = await query(
-    `UPDATE messages SET status = $1 WHERE wa_message_id = $2 RETURNING id, conversation_id`,
-    [status, waMessageId]
-  );
+    if (!settings) {
+      // No settings — just trigger n8n with defaults
+      return triggerN8n(message, conversation, contact, settings, io);
+    }
 
-  if (result.rows.length > 0) {
-    const { id, conversation_id } = result.rows[0];
-    io.emit('message_status_update', { messageId: id, conversationId: conversation_id, status });
+    // Run intent + sentiment
+    const text = message.content || '';
+    const lower = text.toLowerCase();
+
+    // Intent detection
+    let intent = 'other';
+    if (/order|track|shipping|delivery|dispatch|parcel|package/i.test(text))              intent = 'order';
+    else if (/complain|angry|terrible|awful|worst|bad|problem|issue|broken|frustrated/i.test(text)) intent = 'complaint';
+    else if (/pay|payment|price|cost|invoice|bill|charge|fee|refund/i.test(text))         intent = 'payment';
+    else if (/\?|how|what|when|where|why|who|help|info|detail/i.test(text))               intent = 'question';
+
+    // Sentiment scoring
+    const negWords = ['bad','terrible','awful','hate','angry','furious','worst','broken','complaint','refund','cancel','frustrat','disappoint','unacceptable'];
+    const posWords = ['great','good','thanks','thank','love','excellent','perfect','happy','amazing','helpful','appreciate','wonderful'];
+    let score = 0;
+    negWords.forEach(w => { if (lower.includes(w)) score -= 0.2; });
+    posWords.forEach(w => { if (lower.includes(w)) score += 0.2; });
+    score = Math.max(-1, Math.min(1, score));
+    const sentiment = score <= -0.3 ? 'negative' : score >= 0.3 ? 'positive' : 'neutral';
+
+    // Persist intent + sentiment to conversation
+    await query(
+      `UPDATE conversations SET intent=$1, sentiment=$2, sentiment_score=$3, updated_at=NOW() WHERE id=$4`,
+      [intent, sentiment, parseFloat(score.toFixed(2)), conversation.id]
+    );
+
+    // Check auto-pause conditions
+    const triggeredKeyword = (settings.pause_keywords || []).find(kw => lower.includes(kw.toLowerCase()));
+    const shouldPause = settings.auto_pause_enabled && (
+      !!triggeredKeyword || (settings.sentiment_enabled && sentiment === 'negative' && score <= -0.4)
+    );
+
+    if (shouldPause) {
+      const resumeAt = new Date(Date.now() + (settings.auto_resume_hours || 2) * 60 * 60 * 1000);
+      const pauseReason = triggeredKeyword
+        ? `Pause keyword detected: "${triggeredKeyword}"`
+        : 'Negative sentiment detected';
+
+      await query(
+        `UPDATE conversations SET automation_enabled=false, ai_paused_until=$1, ai_pause_reason=$2, updated_at=NOW() WHERE id=$3`,
+        [resumeAt, pauseReason, conversation.id]
+      );
+
+      // Emit update so dashboard shows AI paused
+      const updatedConv = await query(`SELECT * FROM conversations WHERE id=$1`, [conversation.id]);
+      io.emit('conversation_updated', updatedConv.rows[0]);
+
+      console.log(`[AI] Auto-paused conversation ${conversation.id}: ${pauseReason}`);
+      return; // Don't send AI reply — hand to human
+    }
+
+    // All good — trigger n8n with system prompt from DB
+    await triggerN8n(message, conversation, contact, settings, io);
+
+  } catch (err) {
+    console.error('[AI Analysis] Error:', err.message);
+    // Fallback — still try to reply via n8n
+    await triggerN8n(message, conversation, contact, null, io).catch(console.error);
   }
 };
 
-/**
- * Trigger n8n workflow and handle response
- */
-const triggerN8n = async (message, conversation, contact, io) => {
+const triggerN8n = async (message, conversation, contact, settings, io) => {
   const payload = {
     phone_number:    contact.phone_number,
     contact_name:    contact.name,
@@ -154,6 +184,15 @@ const triggerN8n = async (message, conversation, contact, io) => {
     message_type:    message.type,
     conversation_id: conversation.id,
     message_id:      message.id,
+    // ── Phase 3: Pass AI settings to n8n so it can use the correct system prompt ──
+    ai_settings: settings ? {
+      system_prompt:        settings.system_prompt,
+      ai_name:              settings.ai_name,
+      model:                settings.model,
+      confidence_threshold: settings.confidence_threshold,
+      intent:               conversation.intent || null,
+      sentiment:            conversation.sentiment || null,
+    } : null,
   };
 
   const logResult = await query(
@@ -173,9 +212,10 @@ const triggerN8n = async (message, conversation, contact, io) => {
       [JSON.stringify(response), duration, logId]
     );
 
-    // Send the reply back via WhatsApp
     if (response?.reply) {
-      await whatsappService.sendTextMessage(contact.phone_number, response.reply, conversation.id, io);
+      // Mark reply as AI-generated
+      const sentMsg = await whatsappService.sendTextMessage(contact.phone_number, response.reply, conversation.id, io);
+      await query(`UPDATE messages SET is_ai=true, source='ai' WHERE id=$1`, [sentMsg.id]).catch(() => {});
     }
   } catch (err) {
     const duration = Date.now() - start;
@@ -187,49 +227,35 @@ const triggerN8n = async (message, conversation, contact, io) => {
   }
 };
 
-/**
- * Extract typed content from raw WhatsApp message object
- */
+const handleStatusUpdate = async (statusUpdate, io) => {
+  const { id: waMessageId, status, timestamp } = statusUpdate;
+  const result = await query(
+    `UPDATE messages SET status = $1 WHERE wa_message_id = $2 RETURNING id, conversation_id`,
+    [status, waMessageId]
+  );
+  if (result.rows.length > 0) {
+    const { id, conversation_id } = result.rows[0];
+    io.emit('message_status_update', { messageId: id, conversationId: conversation_id, status });
+  }
+};
+
 const extractMessageContent = (waMsg) => {
   const type = waMsg.type;
   let content = null;
   let mediaUrl = null;
-
   switch (type) {
-    case 'text':
-      content = waMsg.text?.body;
-      break;
-    case 'image':
-      content = waMsg.image?.caption || '[Image]';
-      mediaUrl = waMsg.image?.id; // media ID — resolve separately if needed
-      break;
-    case 'audio':
-      content = '[Voice message]';
-      mediaUrl = waMsg.audio?.id;
-      break;
-    case 'video':
-      content = waMsg.video?.caption || '[Video]';
-      mediaUrl = waMsg.video?.id;
-      break;
-    case 'document':
-      content = waMsg.document?.filename || '[Document]';
-      mediaUrl = waMsg.document?.id;
-      break;
-    case 'sticker':
-      content = '[Sticker]';
-      break;
-    case 'location':
-      content = `[Location: ${waMsg.location?.latitude}, ${waMsg.location?.longitude}]`;
-      break;
+    case 'text':     content = waMsg.text?.body; break;
+    case 'image':    content = waMsg.image?.caption || '[Image]';    mediaUrl = waMsg.image?.id;    break;
+    case 'audio':    content = '[Voice message]';                     mediaUrl = waMsg.audio?.id;    break;
+    case 'video':    content = waMsg.video?.caption || '[Video]';    mediaUrl = waMsg.video?.id;    break;
+    case 'document': content = waMsg.document?.filename || '[Document]'; mediaUrl = waMsg.document?.id; break;
+    case 'sticker':  content = '[Sticker]'; break;
+    case 'location': content = `[Location: ${waMsg.location?.latitude}, ${waMsg.location?.longitude}]`; break;
     case 'interactive':
-      content = waMsg.interactive?.button_reply?.title
-             || waMsg.interactive?.list_reply?.title
-             || '[Interactive]';
+      content = waMsg.interactive?.button_reply?.title || waMsg.interactive?.list_reply?.title || '[Interactive]';
       break;
-    default:
-      content = `[${type}]`;
+    default: content = `[${type}]`;
   }
-
   return { type, content, mediaUrl };
 };
 
