@@ -1,16 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuthStore } from '../store';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 
-const API = process.env.REACT_APP_API_URL || '';
 
-function api(path, opts = {}) {
-  const token = useAuthStore.getState().token;
-  return fetch(API + path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
-  }).then(r => r.json());
-}
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState([]);

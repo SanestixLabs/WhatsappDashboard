@@ -1,15 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useAuthStore } from '../store';
+import api from '../services/api';
 import toast from 'react-hot-toast';
-
-const API = process.env.REACT_APP_API_URL || '';
-function api(path, opts = {}) {
-  const token = useAuthStore.getState().token;
-  return fetch(API + path, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
-  }).then(r => r.json());
-}
 
 const STATUS_COLORS = {
   draft:      { bg: 'rgba(100,116,139,0.15)', color: '#64748b' },
@@ -20,72 +11,108 @@ const STATUS_COLORS = {
   cancelled:  { bg: 'rgba(100,116,139,0.15)', color: '#64748b' },
 };
 
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'ur', label: 'Urdu' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'pt_BR', label: 'Portuguese (BR)' },
+  { code: 'id', label: 'Indonesian' },
+  { code: 'tr', label: 'Turkish' },
+];
+
 export default function BroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState([]);
   const [segments, setSegments] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [allTags, setAllTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [form, setForm] = useState({ name: '', template_name: '', template_lang: 'en', target_all: true, target_tags: [], segment_id: '', scheduled_at: '' });
-  const [allTags, setAllTags] = useState([]);
   const [sending, setSending] = useState(null);
+  const emptyForm = { name: '', template_name: '', template_lang: 'en', target_all: true, target_tags: [], segment_id: '', scheduled_date: '', scheduled_time: '' };
+  const [form, setForm] = useState(emptyForm);
 
   useEffect(() => { loadAll(); }, []);
 
   async function loadAll() {
     setLoading(true);
-    const [b, s, t, tags] = await Promise.all([
-      api('/api/broadcasts'),
-      api('/api/segments'),
-      api('/api/templates'),
-      api('/api/contacts/tags'),
-    ]);
-    if (Array.isArray(b)) setBroadcasts(b);
-    if (Array.isArray(s)) setSegments(s);
-    if (Array.isArray(t)) setTemplates(t);
-    if (Array.isArray(tags)) setAllTags(tags);
+    try {
+      const [b, s, t, tags] = await Promise.all([
+        api.get('/api/broadcasts').then(r => r.data),
+        api.get('/api/segments').then(r => r.data),
+        api.get('/api/templates').then(r => r.data),
+        api.get('/api/contacts/tags').then(r => r.data),
+      ]);
+      if (Array.isArray(b)) setBroadcasts(b);
+      if (Array.isArray(s)) setSegments(s);
+      if (Array.isArray(t)) setTemplates(t);
+      if (Array.isArray(tags)) setAllTags(tags);
+    } catch {}
     setLoading(false);
   }
 
   async function openDetail(b) {
-    const r = await api(`/api/broadcasts/${b.id}`);
-    setDetail(r);
+    try {
+      const r = await api.get(`/api/broadcasts/${b.id}`);
+      setDetail(r.data);
+    } catch { toast.error('Failed to load'); }
   }
 
   async function createBroadcast() {
     if (!form.name || !form.template_name) return toast.error('Name and template required');
-    const payload = { ...form };
-    if (!payload.scheduled_at) delete payload.scheduled_at;
-    if (!payload.segment_id) delete payload.segment_id;
-    const r = await api('/api/broadcasts', { method: 'POST', body: JSON.stringify(payload) });
-    if (r.id) { toast.success('Broadcast created'); setCreating(false); setForm({ name: '', template_name: '', template_lang: 'en', target_all: true, target_tags: [], segment_id: '', scheduled_at: '' }); loadAll(); }
-    else toast.error(r.error || 'Failed');
+    const payload = {
+      name: form.name,
+      template_name: form.template_name,
+      template_lang: form.template_lang,
+      target_all: form.target_all,
+      target_tags: form.target_tags,
+      segment_id: form.segment_id || undefined,
+    };
+    if (form.scheduled_date && form.scheduled_time) {
+      payload.scheduled_at = new Date(`${form.scheduled_date}T${form.scheduled_time}`).toISOString();
+    }
+    try {
+      const r = await api.post('/api/broadcasts', payload);
+      if (r.data.id) {
+        toast.success('Broadcast created');
+        setCreating(false);
+        setForm(emptyForm);
+        loadAll();
+      }
+    } catch (e) { toast.error(e.response?.data?.error || 'Failed'); }
   }
 
   async function sendBroadcast(id) {
     setSending(id);
-    const r = await api(`/api/broadcasts/${id}/send`, { method: 'POST' });
+    try {
+      const r = await api.post(`/api/broadcasts/${id}/send`);
+      toast.success(`Sending to ${r.data.total_recipients} contacts`);
+      loadAll();
+      if (detail?.id === id) openDetail({ id });
+    } catch (e) { toast.error(e.response?.data?.error || 'Send failed'); }
     setSending(null);
-    if (r.success) { toast.success(`Sending to ${r.total_recipients} contacts`); loadAll(); if (detail?.id === id) openDetail({ id }); }
-    else toast.error(r.error || 'Failed');
   }
 
   async function cancelBroadcast(id) {
-    await api(`/api/broadcasts/${id}/cancel`, { method: 'POST' });
+    await api.post(`/api/broadcasts/${id}/cancel`);
     toast.success('Cancelled'); loadAll();
   }
 
   async function deleteBroadcast(id) {
-    await api(`/api/broadcasts/${id}`, { method: 'DELETE' });
+    await api.delete(`/api/broadcasts/${id}`);
     toast.success('Deleted'); loadAll(); setDetail(null);
   }
 
   const pct = (n, total) => total > 0 ? Math.round((n / total) * 100) : 0;
 
+  // Min date = today
+  const todayDate = new Date().toISOString().split('T')[0];
+
   return (
     <div style={s.root}>
-      {/* Header */}
       <div style={s.header}>
         <div>
           <div style={s.title}>Broadcasts</div>
@@ -96,7 +123,6 @@ export default function BroadcastsPage() {
         </button>
       </div>
 
-      {/* List */}
       <div style={s.listWrap}>
         {loading ? (
           <div style={s.empty}><SpinIcon /></div>
@@ -107,41 +133,39 @@ export default function BroadcastsPage() {
             <div style={s.emptySub}>Reach your customers with a single WhatsApp message using approved templates.</div>
             <button style={s.btnPrimary} onClick={() => setCreating(true)}>Create broadcast</button>
           </div>
-        ) : (
-          broadcasts.map(b => (
-            <div key={b.id} style={s.card} onClick={() => openDetail(b)}>
-              <div style={s.cardTop}>
-                <div style={s.cardName}>{b.name}</div>
-                <span style={{ ...s.statusBadge, ...STATUS_COLORS[b.status] }}>{b.status}</span>
-              </div>
-              <div style={s.cardMeta}>
-                <span style={s.metaItem}><TemplateIcon /> {b.template_name}</span>
-                {b.segment_name && <span style={s.metaItem}><SegmentIcon /> {b.segment_name}</span>}
-                {b.scheduled_at && <span style={s.metaItem}><ClockIcon /> {new Date(b.scheduled_at).toLocaleString()}</span>}
-                <span style={s.metaItem}><UsersIcon /> {b.total_recipients || 0} recipients</span>
-              </div>
-              {b.status === 'sent' && b.total_recipients > 0 && (
-                <div style={s.statsRow}>
-                  {[['Sent', b.sent_count, '#00d4b8'], ['Delivered', b.delivered_count, '#10b981'], ['Read', b.read_count, '#6366f1'], ['Failed', b.failed_count, '#ef4444']].map(([label, count, color]) => (
-                    <div key={label} style={s.statBox}>
-                      <div style={{ ...s.statNum, color }}>{pct(count, b.total_recipients)}%</div>
-                      <div style={s.statLabel}>{label}</div>
-                      <div style={s.statRaw}>{count || 0}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {['draft', 'scheduled'].includes(b.status) && (
-                <div style={s.cardActions} onClick={e => e.stopPropagation()}>
-                  <button style={s.btnSend} disabled={sending === b.id} onClick={() => sendBroadcast(b.id)}>
-                    {sending === b.id ? 'Sending...' : <><SendIcon /> Send Now</>}
-                  </button>
-                  <button style={s.btnDanger} onClick={() => cancelBroadcast(b.id)}>Cancel</button>
-                </div>
-              )}
+        ) : broadcasts.map(b => (
+          <div key={b.id} style={s.card} onClick={() => openDetail(b)}>
+            <div style={s.cardTop}>
+              <div style={s.cardName}>{b.name}</div>
+              <span style={{ ...s.statusBadge, ...STATUS_COLORS[b.status] }}>{b.status}</span>
             </div>
-          ))
-        )}
+            <div style={s.cardMeta}>
+              <span style={s.metaItem}><TemplateIcon /> {b.template_name}</span>
+              {b.segment_name && <span style={s.metaItem}><SegmentIcon /> {b.segment_name}</span>}
+              {b.scheduled_at && <span style={s.metaItem}><ClockIcon /> {new Date(b.scheduled_at).toLocaleString()}</span>}
+              <span style={s.metaItem}><UsersIcon /> {b.total_recipients || 0} recipients</span>
+            </div>
+            {b.status === 'sent' && b.total_recipients > 0 && (
+              <div style={s.statsRow}>
+                {[['Sent', b.sent_count, '#00d4b8'], ['Delivered', b.delivered_count, '#10b981'], ['Read', b.read_count, '#6366f1'], ['Failed', b.failed_count, '#ef4444']].map(([label, count, color]) => (
+                  <div key={label} style={s.statBox}>
+                    <div style={{ ...s.statNum, color }}>{pct(count, b.total_recipients)}%</div>
+                    <div style={s.statLabel}>{label}</div>
+                    <div style={s.statRaw}>{count || 0}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {['draft', 'scheduled'].includes(b.status) && (
+              <div style={s.cardActions} onClick={e => e.stopPropagation()}>
+                <button style={s.btnSend} disabled={sending === b.id} onClick={() => sendBroadcast(b.id)}>
+                  {sending === b.id ? 'Sending...' : <><SendIcon /> Send Now</>}
+                </button>
+                <button style={s.btnDanger} onClick={() => cancelBroadcast(b.id)}>Cancel</button>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Create Modal */}
@@ -153,50 +177,58 @@ export default function BroadcastsPage() {
               <button style={s.closeBtn} onClick={() => setCreating(false)}><ClearIcon /></button>
             </div>
             <div style={s.modalBody}>
-              {[
-                { label: 'Broadcast Name', key: 'name', type: 'text', placeholder: 'e.g. Eid Offer 2026' },
-                { label: 'Template Language', key: 'template_lang', type: 'text', placeholder: 'en' },
-              ].map(({ label, key, type, placeholder }) => (
-                <div key={key} style={s.field}>
-                  <label style={s.label}>{label}</label>
-                  <input style={s.input} type={type} placeholder={placeholder} value={form[key]}
-                    onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} />
-                </div>
-              ))}
+
+              <div style={s.field}>
+                <label style={s.label}>Broadcast Name</label>
+                <input style={s.input} placeholder="e.g. Eid Offer 2026" value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
 
               <div style={s.field}>
                 <label style={s.label}>WhatsApp Template</label>
                 {templates.length > 0 ? (
-                  <select style={s.select} value={form.template_name} onChange={e => setForm(f => ({ ...f, template_name: e.target.value }))}>
+                  <select style={s.select} value={form.template_name}
+                    onChange={e => setForm(f => ({ ...f, template_name: e.target.value }))}>
                     <option value="">Select template...</option>
-                    {templates.map(t => <option key={t.name} value={t.name}>{t.name} ({t.language || 'en'})</option>)}
+                    {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
                   </select>
                 ) : (
-                  <input style={s.input} placeholder="Template name (exact)" value={form.template_name}
+                  <input style={s.input} placeholder="Template name (exact match from Meta)" value={form.template_name}
                     onChange={e => setForm(f => ({ ...f, template_name: e.target.value }))} />
                 )}
+              </div>
+
+              <div style={s.field}>
+                <label style={s.label}>Template Language</label>
+                <select style={s.select} value={form.template_lang}
+                  onChange={e => setForm(f => ({ ...f, template_lang: e.target.value }))}>
+                  {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label} ({l.code})</option>)}
+                </select>
               </div>
 
               <div style={s.field}>
                 <label style={s.label}>Audience</label>
                 <div style={s.audienceOpts}>
                   <label style={s.radioLabel}>
-                    <input type="radio" checked={form.target_all} onChange={() => setForm(f => ({ ...f, target_all: true, target_tags: [], segment_id: '' }))} />
+                    <input type="radio" checked={form.target_all}
+                      onChange={() => setForm(f => ({ ...f, target_all: true, target_tags: [], segment_id: '' }))} />
                     All active contacts
                   </label>
                   <label style={s.radioLabel}>
-                    <input type="radio" checked={!form.target_all && !form.segment_id} onChange={() => setForm(f => ({ ...f, target_all: false, segment_id: '' }))} />
+                    <input type="radio" checked={!form.target_all && !form.segment_id}
+                      onChange={() => setForm(f => ({ ...f, target_all: false, segment_id: '' }))} />
                     By tag
                   </label>
                   {segments.length > 0 && (
                     <label style={s.radioLabel}>
-                      <input type="radio" checked={!!form.segment_id} onChange={() => setForm(f => ({ ...f, target_all: false, segment_id: segments[0]?.id || '' }))} />
-                      By segment
+                      <input type="radio" checked={!!form.segment_id}
+                        onChange={() => setForm(f => ({ ...f, target_all: false, segment_id: segments[0]?.id || '' }))} />
+                      By saved segment
                     </label>
                   )}
                 </div>
-                {!form.target_all && !form.segment_id && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                {!form.target_all && !form.segment_id && allTags.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
                     {allTags.map(t => (
                       <label key={t} style={{ ...s.tagChk, ...(form.target_tags.includes(t) ? s.tagChkActive : {}) }}>
                         <input type="checkbox" style={{ display: 'none' }} checked={form.target_tags.includes(t)}
@@ -207,17 +239,27 @@ export default function BroadcastsPage() {
                   </div>
                 )}
                 {!!form.segment_id && (
-                  <select style={{ ...s.select, marginTop: 8 }} value={form.segment_id} onChange={e => setForm(f => ({ ...f, segment_id: e.target.value }))}>
-                    {segments.map(s => <option key={s.id} value={s.id}>{s.name} ({s.contact_count} contacts)</option>)}
+                  <select style={{ ...s.select, marginTop: 8 }} value={form.segment_id}
+                    onChange={e => setForm(f => ({ ...f, segment_id: e.target.value }))}>
+                    {segments.map(sg => <option key={sg.id} value={sg.id}>{sg.name} ({sg.contact_count} contacts)</option>)}
                   </select>
                 )}
               </div>
 
               <div style={s.field}>
                 <label style={s.label}>Schedule (optional)</label>
-                <input style={s.input} type="datetime-local" value={form.scheduled_at}
-                  onChange={e => setForm(f => ({ ...f, scheduled_at: e.target.value }))} />
+                <div style={s.dateTimeRow}>
+                  <input style={{ ...s.input, flex: 1 }} type="date" min={todayDate} value={form.scheduled_date}
+                    onChange={e => setForm(f => ({ ...f, scheduled_date: e.target.value }))} />
+                  <input style={{ ...s.input, width: 130 }} type="time" value={form.scheduled_time}
+                    onChange={e => setForm(f => ({ ...f, scheduled_time: e.target.value }))} />
+                </div>
                 <div style={s.hint}>Leave empty to save as draft and send manually.</div>
+                {form.scheduled_date && form.scheduled_time && (
+                  <div style={s.schedulePreview}>
+                    <ClockIcon /> Scheduled for {new Date(`${form.scheduled_date}T${form.scheduled_time}`).toLocaleString()}
+                  </div>
+                )}
               </div>
             </div>
             <div style={s.modalFooter}>
@@ -241,8 +283,18 @@ export default function BroadcastsPage() {
             </div>
             <div style={s.modalBody}>
               <div style={s.detailGrid}>
-                {[['Template', detail.template_name], ['Language', detail.template_lang], ['Recipients', detail.total_recipients], ['Segment', detail.segment_name || '—'], ['Created', detail.created_by_name || '—'], ['Scheduled', detail.scheduled_at ? new Date(detail.scheduled_at).toLocaleString() : '—']].map(([l, v]) => (
-                  <div key={l} style={s.detailItem}><div style={s.label}>{l}</div><div style={s.detailVal}>{v}</div></div>
+                {[
+                  ['Template', detail.template_name],
+                  ['Language', LANGUAGES.find(l => l.code === detail.template_lang)?.label || detail.template_lang],
+                  ['Recipients', detail.total_recipients],
+                  ['Segment', detail.segment_name || '—'],
+                  ['Created by', detail.created_by_name || '—'],
+                  ['Scheduled', detail.scheduled_at ? new Date(detail.scheduled_at).toLocaleString() : '—'],
+                ].map(([l, v]) => (
+                  <div key={l} style={s.detailItem}>
+                    <div style={s.label}>{l}</div>
+                    <div style={s.detailVal}>{v}</div>
+                  </div>
                 ))}
               </div>
 
@@ -275,7 +327,7 @@ export default function BroadcastsPage() {
             <div style={s.modalFooter}>
               {['draft', 'scheduled'].includes(detail.status) && (
                 <button style={s.btnSend} disabled={sending === detail.id} onClick={() => sendBroadcast(detail.id)}>
-                  {sending === detail.id ? 'Sending...' : 'Send Now'}
+                  {sending === detail.id ? 'Sending...' : <><SendIcon /> Send Now</>}
                 </button>
               )}
               {['draft', 'cancelled'].includes(detail.status) && (
@@ -306,7 +358,7 @@ const s = {
   title: { fontSize: 20, fontWeight: 700, color: '#e2e8f0' },
   sub: { fontSize: 12, color: '#3a5068', marginTop: 2 },
   listWrap: { flex: 1, overflow: 'auto', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: 12 },
-  card: { background: '#111b21', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', transition: 'border-color 0.15s' },
+  card: { background: '#111b21', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: '16px 18px', cursor: 'pointer' },
   cardTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   cardName: { fontSize: 14, fontWeight: 600, color: '#e2e8f0' },
   cardMeta: { display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 10 },
@@ -336,6 +388,8 @@ const s = {
   radioLabel: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#8fa8b8', cursor: 'pointer' },
   tagChk: { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 7, padding: '5px 12px', fontSize: 12, color: '#8fa8b8', cursor: 'pointer' },
   tagChkActive: { background: 'rgba(0,212,184,0.12)', border: '1px solid rgba(0,212,184,0.3)', color: '#00d4b8' },
+  dateTimeRow: { display: 'flex', gap: 8 },
+  schedulePreview: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#00d4b8', background: 'rgba(0,212,184,0.08)', borderRadius: 7, padding: '7px 10px', marginTop: 4 },
   detailGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   detailItem: { display: 'flex', flexDirection: 'column', gap: 4 },
   detailVal: { fontSize: 13, color: '#c9d8e4', fontWeight: 500 },

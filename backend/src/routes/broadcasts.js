@@ -3,9 +3,9 @@ const { query } = require('../config/database');
 const axios   = require('axios');
 const router  = express.Router();
 
-const WA_API_URL  = process.env.WHATSAPP_API_URL;
-const WA_TOKEN    = process.env.WHATSAPP_TOKEN;
-const WA_PHONE_ID = process.env.WHATSAPP_PHONE_ID;
+const WA_API_URL  = `https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION || 'v19.0'}`;
+const WA_TOKEN    = process.env.WHATSAPP_ACCESS_TOKEN;
+const WA_PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 // GET /api/broadcasts
 router.get('/', async (req, res, next) => {
