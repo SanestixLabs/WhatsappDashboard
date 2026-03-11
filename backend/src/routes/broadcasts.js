@@ -132,6 +132,9 @@ router.delete('/:id', async (req, res, next) => {
 async function processBroadcast(broadcast, contacts) {
   let sent = 0, failed = 0;
   const vars = broadcast.template_vars || [];
+  // Lookup actual language from message_templates table
+  const tmplRow = await query('SELECT language FROM message_templates WHERE name=$1 ORDER BY created_at DESC LIMIT 1', [broadcast.template_name]);
+  const tmplLang = tmplRow.rows[0]?.language || broadcast.template_lang || 'en';
 
   for (const contact of contacts) {
     try {
@@ -148,7 +151,7 @@ async function processBroadcast(broadcast, contacts) {
           type: 'template',
           template: {
             name: broadcast.template_name,
-            language: { code: broadcast.template_lang || 'en' },
+            language: { code: tmplLang },
             components
           }
         },
