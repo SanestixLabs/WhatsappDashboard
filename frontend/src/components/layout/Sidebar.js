@@ -21,6 +21,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
     { id:'stats',       label:'Stats',     icon:<StatsIcon/> },
     { id:'automations', label:'Auto',      icon:<BotIcon/> },
     { id:'templates',   label:'Templates', icon:<TemplatesIcon/> },
+    { id:'settings',    label:'Settings',  icon:<SettingsIcon/> },
   ];
 
   const handleStatusChange = async (newStatus) => {
@@ -70,7 +71,8 @@ export default function Sidebar({ activeTab, onTabChange }) {
         ))}
       </nav>
       <div style={s.bottom}>
-        <button title="Settings" style={s.btn}><SettingsIcon/></button>
+        <button title="Settings" onClick={()=>onTabChange('settings')}
+          style={{...s.btn,...(activeTab==='settings'?s.btnActive:{})}}><SettingsIcon/>{activeTab==='settings'&&<div style={s.bar}/>}</button>
         <div style={{position:'relative'}}>
           <button onClick={() => setShowStatus(!showStatus)} style={s.btn} title={`Status: ${statusLabels[status]}`}>
             <div style={{...s.onlineDot, background: statusColors[status], boxShadow: `0 0 8px ${statusColors[status]}99`}}/>

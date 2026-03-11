@@ -143,8 +143,8 @@ router.post('/:id/transfer', async (req, res, next) => {
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Conversation not found' });
     await query(
-      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, metadata)
-       VALUES ($1, 'conversation.transferred', 'conversation', $2, $3)`,
+      `INSERT INTO audit_logs (actor_id, action, target, target_type, target_id, metadata)
+       VALUES ($1, 'conversation.transferred', $2::text, 'conversation', $2::uuid, $3)`,
       [req.user.id, req.params.id, JSON.stringify({ to: agent_id, note })]
     );
     req.app.get('io').emit('conversation_transferred', {

@@ -34,8 +34,8 @@ router.post('/:conversationId', async (req, res) => {
     const io = req.app.get('io');
     if (io) io.emit('new_note', { conversationId: req.params.conversationId, note });
     await query(
-      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, metadata)
-       VALUES ($1, 'note.added', 'conversation', $2, $3)`,
+      `INSERT INTO audit_logs (actor_id, action, target, target_type, target_id, metadata)
+       VALUES ($1, 'note.added', $2::text, 'conversation', $2::uuid, $3)`,
       [req.user.id, req.params.conversationId, JSON.stringify({ preview: content.substring(0, 50) })]
     );
     res.status(201).json({ note });

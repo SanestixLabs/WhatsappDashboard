@@ -572,18 +572,43 @@ export default function ChatWindow({ conversation }) {
       <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'}}>
         <div style={{background:'#0c1219',borderRadius:'16px',border:'1px solid rgba(255,255,255,0.1)',width:'480px',maxHeight:'70vh',display:'flex',flexDirection:'column'}}>
           <div style={{padding:'18px 22px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontSize:'15px',fontWeight:'700',color:'#e9edef'}}>🔒 Internal Notes</span>
+            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+              <div style={{width:'28px',height:'28px',borderRadius:'7px',background:'rgba(245,158,11,0.15)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </div>
+              <div>
+                <div style={{fontSize:'14px',fontWeight:'700',color:'#e9edef',lineHeight:'1.2'}}>Internal Notes</div>
+                <div style={{fontSize:'10px',color:'#536471',marginTop:'1px'}}>Visible to agents only</div>
+              </div>
+            </div>
             <button onClick={()=>setShowNotes(false)} style={{background:'none',border:'none',color:'#536471',cursor:'pointer',fontSize:'18px'}}>✕</button>
           </div>
           <div style={{flex:1,overflowY:'auto',padding:'16px',display:'flex',flexDirection:'column',gap:'10px'}}>
-            {notes.length===0 && <div style={{textAlign:'center',color:'#536471',padding:'30px',fontSize:'13px'}}>No notes yet. Add one below.</div>}
-            {notes.map(n=>(
-              <div key={n.id} style={{background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:'10px',padding:'12px 14px'}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px'}}>
-                  <span style={{fontSize:'11px',fontWeight:'700',color:'#f59e0b'}}>{n.author_name}</span>
-                  <span style={{fontSize:'10px',color:'#536471'}}>{new Date(n.created_at).toLocaleString()}</span>
+            {notes.length===0 && (
+              <div style={{textAlign:'center',padding:'40px 20px'}}>
+                <div style={{width:'44px',height:'44px',borderRadius:'12px',background:'rgba(245,158,11,0.1)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="1.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </div>
-                <div style={{fontSize:'13px',color:'#e9edef',lineHeight:'1.5'}}>{n.content}</div>
+                <div style={{fontSize:'13px',fontWeight:'600',color:'#536471',marginBottom:'4px'}}>No notes yet</div>
+                <div style={{fontSize:'11px',color:'#3a5068'}}>Add internal notes for your team below</div>
+              </div>
+            )}
+            {notes.map(n=>(
+              <div key={n.id} style={{background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.18)',borderRadius:'10px',padding:'13px 15px',transition:'border-color 0.2s'}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(245,158,11,0.4)'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(245,158,11,0.18)'}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
+                    <div style={{width:'24px',height:'24px',borderRadius:'50%',background:'linear-gradient(135deg,#f59e0b,#d97706)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'10px',fontWeight:'800',color:'#070b11'}}>
+                      {(n.author_name||'?')[0].toUpperCase()}
+                    </div>
+                    <span style={{fontSize:'12px',fontWeight:'600',color:'#f59e0b'}}>{n.author_name||'Agent'}</span>
+                  </div>
+                  <span style={{fontSize:'10px',color:'#3a5068',background:'rgba(255,255,255,0.04)',padding:'2px 7px',borderRadius:'4px'}}>
+                    {new Date(n.created_at).toLocaleString('en',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}
+                  </span>
+                </div>
+                <div style={{fontSize:'13px',color:'#c9d6df',lineHeight:'1.6',paddingLeft:'31px'}}>{n.content}</div>
               </div>
             ))}
           </div>
