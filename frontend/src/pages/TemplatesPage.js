@@ -56,7 +56,7 @@ export default function TemplatesPage() {
     setSyncing(true);
     const res = await fetch(API_BASE + '/api/templates/sync', { method:'POST', headers:{ Authorization:'Bearer ' + token() } });
     const data = await res.json();
-    alert('Synced ' + data.synced + ' templates from Meta');
+    if(data.error) { alert('Sync error: ' + data.error); } else { alert('Synced ' + data.total + ' templates (' + data.imported + ' new, ' + data.synced + ' updated)'); }
     load();
     setSyncing(false);
   };
