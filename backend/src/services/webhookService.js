@@ -1,4 +1,6 @@
 const { query, withTransaction } = require('../config/database');
+const { pool } = require('../config/database');
+const { sendDirectWA, normalizePhone } = require('./shopifyWaSender');
 const whatsappService = require('./whatsappService');
 const n8nService      = require('./n8nService');
 const { notifyQueue } = require('./queueService');
@@ -112,6 +114,36 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
       lastMessage: content,
       timestamp: message.timestamp,
     });
+
+    // ── Shopify text reply: CONFIRM/CANCEL XXXX ────────────────────
+    if (type === 'text') {
+      const textUpper = (content || '').trim().toUpperCase();
+      const confirmMatch = textUpper.match(/^CONFIRM\s+(\d+)$/);
+      const cancelMatch  = textUpper.match(/^CANCEL\s+(\d+)$/);
+      if (confirmMatch || cancelMatch) {
+        const isConfirm  = !!confirmMatch;
+        const orderNumber = (confirmMatch || cancelMatch)[1];
+        setImmediate(() =>
+          handleShopifyButtonReply(normalizePhone(phoneNumber), orderNumber, isConfirm, workspaceId, io).catch(console.error)
+        );
+        return;
+      }
+    }
+    // ────────────────────────────────────────────────────────────
+
+    // ── Shopify order confirmation button reply interceptor ──────
+    if (type === 'interactive') {
+      const buttonId = waMsg.interactive?.button_reply?.id || '';
+      if (buttonId.startsWith('shopify_confirm_') || buttonId.startsWith('shopify_cancel_')) {
+        const isConfirm = buttonId.startsWith('shopify_confirm_');
+        const orderNumber = buttonId.replace('shopify_confirm_', '').replace('shopify_cancel_', '');
+        setImmediate(() =>
+          handleShopifyButtonReply(normalizePhone(phoneNumber), orderNumber, isConfirm, workspaceId, io).catch(console.error)
+        );
+        return; // Stop here — don't send to AI/flow
+      }
+    }
+    // ────────────────────────────────────────────────────────────
 
     // ── Check if AI is paused for this conversation ──
     const isPaused = conversation.ai_paused_until && new Date(conversation.ai_paused_until) > new Date();
@@ -325,6 +357,76 @@ const extractMessageContent = (waMsg) => {
 const isWithin24HourWindow = (conversation) => {
   if (!conversation.session_expires_at) return false;
   return new Date(conversation.session_expires_at) > new Date();
+};
+
+
+// ── Handle Shopify YES/NO button reply ───────────────────────────
+const handleShopifyButtonReply = async (phone, orderNumber, isConfirm, workspaceId, io) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM order_confirmations
+       WHERE phone = $1 AND order_number = $2 AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 1`,
+      [phone, String(orderNumber)]
+    );
+
+    if (!rows[0]) {
+      console.log(`[Shopify] No pending confirmation for order #${orderNumber} phone ${phone}`);
+      return;
+    }
+
+    const conf = rows[0];
+
+    if (isConfirm) {
+      await pool.query(
+        `UPDATE order_confirmations SET status='confirmed', confirmed_at=NOW() WHERE id=$1`,
+        [conf.id]
+      );
+      await pool.query(
+        `UPDATE orders SET status='confirmed', updated_at=NOW() WHERE id=$1`,
+        [conf.order_id]
+      );
+      await sendDirectWA(phone,
+        `✅ *Order Confirmed!*\n\nThank you! Your order #${orderNumber} has been confirmed and is being processed.\n\nWe'll notify you when it ships. 🚚`
+      );
+      console.log(`[Shopify] ✅ Order #${orderNumber} confirmed by customer`);
+    } else {
+      await pool.query(
+        `UPDATE order_confirmations SET status='cancelled', cancelled_at=NOW() WHERE id=$1`,
+        [conf.id]
+      );
+      await pool.query(
+        `UPDATE orders SET status='cancelled', updated_at=NOW() WHERE id=$1`,
+        [conf.order_id]
+      );
+
+      try {
+        const { rows: intRows } = await pool.query(
+          `SELECT config FROM integrations WHERE workspace_id=$1 AND provider='shopify' AND is_active=true`,
+          [workspaceId]
+        );
+        if (intRows[0]) {
+          const { shop_domain, access_token } = intRows[0].config;
+          const axios = require('axios');
+          await axios.post(
+            `https://${shop_domain}/admin/api/2024-01/orders/${conf.shopify_order_id}/cancel.json`,
+            {},
+            { headers: { 'X-Shopify-Access-Token': access_token, 'Content-Type': 'application/json' } }
+          );
+          console.log(`[Shopify] ✅ Order #${orderNumber} cancelled on Shopify`);
+        }
+      } catch (cancelErr) {
+        console.error(`[Shopify] Shopify cancel API error:`, cancelErr.message);
+      }
+
+      await sendDirectWA(phone,
+        `❌ *Order Cancelled*\n\nYour order #${orderNumber} has been cancelled as requested.\n\nIf you have any questions, reply to this message anytime.`
+      );
+      console.log(`[Shopify] ✅ Order #${orderNumber} cancelled by customer`);
+    }
+  } catch (err) {
+    console.error('[Shopify] handleShopifyButtonReply error:', err.message);
+  }
 };
 
 module.exports = { processWebhookEvent };
