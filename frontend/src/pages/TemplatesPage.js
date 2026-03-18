@@ -48,7 +48,7 @@ export default function TemplatesPage() {
 
   const deleteTemplate = async (id) => {
     if (!window.confirm('Delete this template?')) return;
-    await fetch(API_BASE + '/api/templates/' + id, { method:'DELETE', headers:{ Authorization:'Bearer ' + token() } });
+    await fetch(API_BASE + '/templates/' + id, { method:'DELETE', headers:{ Authorization:'Bearer ' + token() } });
     load();
   };
 

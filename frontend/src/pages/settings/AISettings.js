@@ -59,8 +59,8 @@ export default function AISettings() {
   const load = useCallback(async () => {
     try {
       const [sRes, stRes] = await Promise.all([
-        api.get('/api/ai/settings'),
-        api.get('/api/ai/stats').catch(()=>({data:null})),
+        api.get('/ai/settings'),
+        api.get('/ai/stats').catch(()=>({data:null})),
       ]);
       setSettings(sRes.data.settings);
       if (stRes.data) setStats(stRes.data);
@@ -75,7 +75,7 @@ export default function AISettings() {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await api.put('/api/ai/settings', settings);
+      const res = await api.put('/ai/settings', settings);
       setSettings(res.data.settings);
       setDirty(false);
       toast.success('AI settings saved!');
@@ -94,7 +94,7 @@ export default function AISettings() {
     if (!testMsg.trim()) return;
     setTesting(true); setTestResult(null);
     try {
-      const res = await api.post('/api/ai/analyze', { message_text: testMsg });
+      const res = await api.post('/ai/analyze', { message_text: testMsg });
       setTestResult(res.data);
     } catch { toast.error('Test failed'); }
     finally { setTesting(false); }

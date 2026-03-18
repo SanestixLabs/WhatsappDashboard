@@ -2,6 +2,8 @@ const { query, withTransaction } = require('../config/database');
 const whatsappService = require('./whatsappService');
 const n8nService      = require('./n8nService');
 const { notifyQueue } = require('./queueService');
+const { processFlowForMessage } = require('./flowService');
+const { emitToConversation } = require('./socketService');
 
 const processWebhookEvent = async (body, io) => {
   await query(
@@ -38,15 +40,19 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
 
   const { type, content, mediaUrl } = extractMessageContent(waMsg);
 
+  // Resolve workspace
+  const wsResult = await query('SELECT id FROM workspaces LIMIT 1');
+  const workspaceId = wsResult.rows[0]?.id || null;
+
   await withTransaction(async (client) => {
     const contactResult = await client.query(
-      `INSERT INTO contacts (phone_number, name)
-       VALUES ($1, $2)
-       ON CONFLICT (phone_number) DO UPDATE SET
+      `INSERT INTO contacts (phone_number, name, workspace_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (phone_number, workspace_id) DO UPDATE SET
          name = COALESCE(EXCLUDED.name, contacts.name),
          updated_at = NOW()
        RETURNING *`,
-      [phoneNumber, waMsg.profile?.name || null]
+      [phoneNumber, waMsg.profile?.name || null, workspaceId]
     );
     const contact = contactResult.rows[0];
 
@@ -59,9 +65,9 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
     if (convResult.rows.length === 0) {
       isNewConversation = true;
       convResult = await client.query(
-        `INSERT INTO conversations (contact_id, status, automation_enabled)
-         VALUES ($1, 'open', true) RETURNING *`,
-        [contact.id]
+        `INSERT INTO conversations (contact_id, status, automation_enabled, workspace_id)
+         VALUES ($1, 'open', true, $2) RETURNING *`,
+        [contact.id, workspaceId]
       );
     }
     const conversation = convResult.rows[0];
@@ -84,7 +90,22 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
       [waMessageId]
     );
 
-    io.emit('new_message', { message, conversation: { ...conversation, contact } });
+    // Refresh 24-hour session window on every incoming customer message
+    await client.query(
+      `UPDATE conversations
+        SET session_expires_at = NOW() + INTERVAL '24 hours',
+            updated_at = NOW()
+        WHERE id = $1`,
+      [conversation.id]
+    );
+
+    // Emit to conversation room (targeted) AND broadcast for conversation list updates
+    emitToConversation(conversation.id, 'new_message', {
+      message,
+      conversation: { ...conversation, contact },
+      conversationId: conversation.id,
+    });
+    // Removed duplicate global emit — emitToConversation above is sufficient
     io.emit('conversation_updated', {
       conversationId: conversation.id,
       contactName: contact.name || phoneNumber,
@@ -95,7 +116,16 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
     // ── Check if AI is paused for this conversation ──
     const isPaused = conversation.ai_paused_until && new Date(conversation.ai_paused_until) > new Date();
 
-    if (conversation.automation_enabled && !isPaused && isWithin24HourWindow(conversation)) {
+    // ── Phase 8: Check flow triggers first ──
+    // Re-fetch fresh conversation to get latest automation_enabled state
+    const freshConvResult = await client.query(
+      `SELECT * FROM conversations WHERE id = $1`,
+      [conversation.id]
+    );
+    const freshConv = freshConvResult.rows[0] || conversation;
+    const flowHandled = await processFlowForMessage(contact, freshConv, content, type, io);
+
+    if (!flowHandled && conversation.automation_enabled && !isPaused && isWithin24HourWindow(conversation)) {
       // ── Run intent + sentiment analysis ──
       setImmediate(() =>
         runAnalysis(message, conversation, contact, io).catch(console.error)

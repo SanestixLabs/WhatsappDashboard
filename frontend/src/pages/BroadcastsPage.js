@@ -32,7 +32,7 @@ export default function BroadcastsPage() {
   const [creating, setCreating] = useState(false);
   const [detail, setDetail] = useState(null);
   const [sending, setSending] = useState(null);
-  const emptyForm = { name: '', template_name: '', template_lang: 'en', target_all: true, target_tags: [], segment_id: '', scheduled_date: '', scheduled_time: '' };
+  const emptyForm = { name: '', template_name: '', template_lang: 'en_US', template_vars: [], target_all: true, target_tags: [], segment_id: '', scheduled_date: '', scheduled_time: '' };
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => { loadAll(); }, []);
@@ -41,10 +41,10 @@ export default function BroadcastsPage() {
     setLoading(true);
     try {
       const [b, s, t, tags] = await Promise.all([
-        api.get('/api/broadcasts').then(r => r.data),
-        api.get('/api/segments').then(r => r.data),
-        api.get('/api/templates').then(r => r.data),
-        api.get('/api/contacts/tags').then(r => r.data),
+        api.get('/broadcasts').then(r => r.data),
+        api.get('/segments').then(r => r.data),
+        api.get('/templates').then(r => r.data),
+        api.get('/contacts/tags').then(r => r.data),
       ]);
       if (Array.isArray(b)) setBroadcasts(b);
       if (Array.isArray(s)) setSegments(s);
@@ -56,7 +56,7 @@ export default function BroadcastsPage() {
 
   async function openDetail(b) {
     try {
-      const r = await api.get(`/api/broadcasts/${b.id}`);
+      const r = await api.get(`/broadcasts/${b.id}`);
       setDetail(r.data);
     } catch { toast.error('Failed to load'); }
   }
@@ -67,6 +67,7 @@ export default function BroadcastsPage() {
       name: form.name,
       template_name: form.template_name,
       template_lang: form.template_lang,
+      template_vars: form.template_vars.filter(v => v.trim() !== ''),
       target_all: form.target_all,
       target_tags: form.target_tags,
       segment_id: form.segment_id || undefined,
@@ -75,7 +76,7 @@ export default function BroadcastsPage() {
       payload.scheduled_at = new Date(`${form.scheduled_date}T${form.scheduled_time}`).toISOString();
     }
     try {
-      const r = await api.post('/api/broadcasts', payload);
+      const r = await api.post('/broadcasts', payload);
       if (r.data.id) {
         toast.success('Broadcast created');
         setCreating(false);
@@ -88,7 +89,7 @@ export default function BroadcastsPage() {
   async function sendBroadcast(id) {
     setSending(id);
     try {
-      const r = await api.post(`/api/broadcasts/${id}/send`);
+      const r = await api.post(`/broadcasts/${id}/send`);
       toast.success(`Sending to ${r.data.total_recipients} contacts`);
       loadAll();
       if (detail?.id === id) openDetail({ id });
@@ -97,12 +98,12 @@ export default function BroadcastsPage() {
   }
 
   async function cancelBroadcast(id) {
-    await api.post(`/api/broadcasts/${id}/cancel`);
+    await api.post(`/broadcasts/${id}/cancel`);
     toast.success('Cancelled'); loadAll();
   }
 
   async function deleteBroadcast(id) {
-    await api.delete(`/api/broadcasts/${id}`);
+    await api.delete(`/broadcasts/${id}`);
     toast.success('Deleted'); loadAll(); setDetail(null);
   }
 
@@ -188,9 +189,14 @@ export default function BroadcastsPage() {
                 <label style={s.label}>WhatsApp Template</label>
                 {templates.length > 0 ? (
                   <select style={s.select} value={form.template_name}
-                    onChange={e => setForm(f => ({ ...f, template_name: e.target.value }))}>
+                    onChange={e => {
+                      const tpl = templates.find(t => t.name === e.target.value);
+                      const matches = tpl ? [...new Set((tpl.body || '').match(/\{\{\d+\}\}/g) || [])] : [];
+                      const vars = matches.map(() => '');
+                      setForm(f => ({ ...f, template_name: e.target.value, template_lang: tpl?.language || 'en_US', template_vars: vars }));
+                    }}>
                     <option value="">Select template...</option>
-                    {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                    {templates.filter(t => t.status === 'approved').map(t => <option key={t.name} value={t.name}>{t.name} ({t.language})</option>)}
                   </select>
                 ) : (
                   <input style={s.input} placeholder="Template name (exact match from Meta)" value={form.template_name}
@@ -205,6 +211,16 @@ export default function BroadcastsPage() {
                   {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label} ({l.code})</option>)}
                 </select>
               </div>
+
+              {form.template_vars.length > 0 && (
+                <div style={s.field}>
+                  <label style={s.label}>Template Variables</label>
+                  {form.template_vars.map((v, i) => (
+                    <input key={i} style={{...s.input, marginBottom: 8}} placeholder={`Variable {{${i+1}}} value`} value={v}
+                      onChange={e => setForm(f => { const vars = [...f.template_vars]; vars[i] = e.target.value; return { ...f, template_vars: vars }; })} />
+                  ))}
+                </div>
+              )}
 
               <div style={s.field}>
                 <label style={s.label}>Audience</label>

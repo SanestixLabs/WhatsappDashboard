@@ -12,7 +12,7 @@ export default function ContactPanel({ conversation, onClose }) {
   useEffect(() => {
     if (!conversation?.id) return;
     const token = localStorage.getItem('accessToken');
-    fetch(API_BASE + '/api/conversations/' + conversation.id + '/contact', {
+    fetch(API_BASE + '/conversations/' + conversation.id + '/contact', {
       headers: { Authorization: 'Bearer ' + token }
     }).then(r => r.json()).then(data => {
       setContact(data);
@@ -30,7 +30,7 @@ export default function ContactPanel({ conversation, onClose }) {
     setSaving(true);
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch(API_BASE + '/api/contacts/' + contact.id, {
+      const res = await fetch(API_BASE + '/contacts/' + contact.id, {
         method: 'PATCH',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -51,7 +51,7 @@ export default function ContactPanel({ conversation, onClose }) {
     const token = localStorage.getItem('accessToken');
     const fd = new FormData();
     fd.append('avatar', file);
-    const res = await fetch(API_BASE + '/api/contacts/' + contact.id + '/avatar', {
+    const res = await fetch(API_BASE + '/contacts/' + contact.id + '/avatar', {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token },
       body: fd,

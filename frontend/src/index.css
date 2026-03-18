@@ -19,3 +19,31 @@ body{font-family:'Urbanist',sans-serif;background:#070b11;color:#edf2f8;font-siz
 .conv-appear{animation:slideRight .15s ease forwards}
 input,textarea,button{font-family:inherit}
 textarea{resize:none}
+
+/* ReactFlow Controls dark theme */
+.react-flow__controls-button {
+  background: #1a2535 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
+  fill: #8fa8b8 !important;
+  color: #8fa8b8 !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+.react-flow__controls-button:hover {
+  background: rgba(0,212,184,0.15) !important;
+  fill: #00d4b8 !important;
+}
+.react-flow__controls-button svg {
+  fill: #8fa8b8 !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+}
+.react-flow__controls-button:hover svg {
+  fill: #00d4b8 !important;
+}
+.react-flow__controls {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(0,212,184,0.2) !important;
+}

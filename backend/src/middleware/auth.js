@@ -13,7 +13,8 @@ const authenticateToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const result = await query(
-      'SELECT id, email, name, role, status, avatar_url FROM users WHERE id = $1 AND is_active = true',
+      `SELECT id, email, name, role, status, avatar_url, workspace_id
+       FROM users WHERE id = $1 AND is_active = true`,
       [decoded.userId]
     );
 
@@ -22,12 +23,10 @@ const authenticateToken = async (req, res, next) => {
     }
 
     req.user = result.rows[0];
+    req.workspaceId = result.rows[0].workspace_id;
     next();
   } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
-    }
-    return res.status(403).json({ error: 'Invalid token' });
+    return res.status(401).json({ error: 'Token expired', code: 'TOKEN_EXPIRED' });
   }
 };
 

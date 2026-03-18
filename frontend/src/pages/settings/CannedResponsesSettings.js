@@ -22,7 +22,7 @@ export default function CannedResponsesSettings() {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/canned?q=');
+      const res = await api.get('/canned?q=');
       setList(res.data.canned || []);
     } catch {}
     setLoading(false);
@@ -42,8 +42,8 @@ export default function CannedResponsesSettings() {
     if (!form.shortcut.trim() || !form.content.trim()) { setError('Both fields are required.'); return; }
     setSaving(true); setError('');
     try {
-      if (editing) await api.put(`/api/canned/${editing.id}`, form);
-      else await api.post('/api/canned', form);
+      if (editing) await api.put(`/canned/${editing.id}`, form);
+      else await api.post('/canned', form);
       await load();
       setShowModal(false);
     } catch (err) { setError(err.response?.data?.error || 'Failed to save.'); }
@@ -52,7 +52,7 @@ export default function CannedResponsesSettings() {
 
   const remove = async (id) => {
     setDeleting(id);
-    try { await api.delete(`/api/canned/${id}`); setList(prev => prev.filter(c => c.id !== id)); } catch {}
+    try { await api.delete(`/canned/${id}`); setList(prev => prev.filter(c => c.id !== id)); } catch {}
     setDeleting(null);
   };
 

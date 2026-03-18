@@ -32,6 +32,8 @@ const io = new Server(server, {
 initSocket(io);
 app.set('io', io);
 
+app.set("trust proxy", 1);
+app.set("etag", false);
 app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -72,6 +74,12 @@ app.use('/api/ai',            authenticateToken, aiRoutes);
 app.use('/api/analytics',     authenticateToken, require('./routes/analytics'));
 app.use('/api/segments',      authenticateToken, require('./routes/segments'));
 app.use('/api/broadcasts',    authenticateToken, require('./routes/broadcasts'));
+app.use('/api/workspaces',    require('./routes/workspaces'));
+app.use('/api/rich',          require('./routes/richMessage'));
+app.use('/api/flows',         authenticateToken, require('./routes/flows'));
+app.use('/api/commerce',      authenticateToken, require('./routes/commerce'));
+app.use('/api/shopify',       require('./routes/shopify'));
+app.use('/api/shopify/oauth', require('./routes/shopifyOAuth'));
 
 app.use(errorHandler);
 

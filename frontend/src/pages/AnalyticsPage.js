@@ -88,9 +88,9 @@ export default function AnalyticsPage() {
     setLoading(true);
     try {
       const [kpiRes, volRes, agentRes] = await Promise.all([
-        api.get(`/api/analytics/kpi?period=${period}`),
-        api.get(`/api/analytics/volume?period=${period}`),
-        api.get(`/api/analytics/agents?period=${period}`),
+        api.get(`/analytics/kpi?period=${period}`),
+        api.get(`/analytics/volume?period=${period}`),
+        api.get(`/analytics/agents?period=${period}`),
       ]);
       setKpi(kpiRes.data);
       setVolume(volRes.data);
@@ -104,7 +104,7 @@ export default function AnalyticsPage() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const res = await api.get(`/api/analytics/export?period=${period}`, { responseType:'blob' });
+      const res = await api.get(`/analytics/export?period=${period}`, { responseType:'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url; a.download = `analytics-${period}-${new Date().toISOString().slice(0,10)}.csv`; a.click();

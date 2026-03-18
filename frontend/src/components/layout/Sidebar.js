@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore, useTeamStore } from '../../store';
 
 export default function Sidebar({ activeTab, onTabChange }) {
@@ -7,6 +8,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
   const [status, setStatus] = useState(user?.status || 'online');
   const [showStatus, setShowStatus] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth <= 768);
@@ -21,6 +23,9 @@ export default function Sidebar({ activeTab, onTabChange }) {
     { id:'analytics', label:'Analytics', icon:<StatsIcon/> },
     { id:'templates', label:'Templates', icon:<TemplatesIcon/> },
     { id:'broadcasts', label:'Broadcasts', icon:<BroadcastIcon/> },
+    { id:'flows', label:'Flows', icon:<FlowsIcon/> },
+    { id:'commerce', label:'Commerce', icon:<CommerceIcon/> },
+    ...(user?.role === 'super_admin' ? [{ id:'super-admin', label:'Admin', icon:<ShieldIcon/>, superAdminOnly: true }] : []),
   ];
 
   const handleStatusChange = async (newStatus) => {
@@ -36,7 +41,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
     return (
       <div style={s.mobileNav}>
         {nav.map(item => (
-          <button key={item.id} onClick={() => onTabChange(item.id)}
+          <button key={item.id} onClick={() => item.id === 'super-admin' ? navigate('/super-admin') : onTabChange(item.id)}
             style={{...s.mobileBtn, ...(activeTab===item.id ? s.mobileBtnActive : {})}}>
             <div style={{position:'relative', display:'flex', alignItems:'center', justifyContent:'center'}}>
               {item.icon}
@@ -61,7 +66,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
       </div>
       <nav style={s.nav}>
         {nav.map(item=>(
-          <button key={item.id} title={item.label} onClick={()=>onTabChange(item.id)}
+          <button key={item.id} title={item.label} onClick={()=> item.id === 'super-admin' ? navigate('/super-admin') : onTabChange(item.id)}
             style={{...s.btn,...(activeTab===item.id?s.btnActive:{})}}>
             {item.icon}
             {item.badge > 0 && <div style={s.badge}>{item.badge > 9 ? '9+' : item.badge}</div>}
@@ -101,6 +106,9 @@ const StatsIcon=()=><svg width="19" height="19" viewBox="0 0 24 24" fill="none" 
 const TemplatesIcon=()=><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 8h10M7 12h7M7 16h4" strokeLinecap="round"/></svg>;
 const BroadcastIcon=()=><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>;
 const SettingsIcon=()=><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
+const ShieldIcon=()=><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+const FlowsIcon=()=><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="5" cy="6" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M5 8v2a4 4 0 004 4h6a4 4 0 014-4V8M12 14v2" strokeLinecap="round"/></svg>;
+const CommerceIcon=()=><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" strokeLinecap="round" strokeLinejoin="round"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0" strokeLinecap="round"/></svg>;
 const LogoutIcon=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>;
 
 const s={

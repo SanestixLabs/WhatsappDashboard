@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useConversationStore, useMessageStore, useTeamStore } from '../store';
 import { useSocket, joinConversationRoom, leaveConversationRoom } from '../hooks/useSocket';
 import Sidebar from '../components/layout/Sidebar';
@@ -10,24 +11,37 @@ import SettingsPage from './SettingsPage';
 import TeamPage from './TeamPage';
 import AnalyticsPage from './AnalyticsPage';
 import ContactsPage from './ContactsPage';
+import SuperAdminPage from './SuperAdminPage';
+import FlowsPage       from './FlowsPage';
 import BroadcastsPage from './BroadcastsPage';
+import CommercePage   from './CommercePage';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore(s => s.user);
   const { conversations, activeConversation, setActiveConversation, fetchConversations } = useConversationStore();
   const { fetchMessages } = useMessageStore();
   const { fetchQueue } = useTeamStore();
-  const [activeTab, setActiveTab] = React.useState('chats');
+  const [activeTab, setActiveTab] = React.useState(useLocation().state?.tab || 'chats');
 
   const socket = useSocket(user);
+
+  // Sync tab with URL
+  useEffect(() => {
+    if (location.pathname === '/super-admin') {
+      setActiveTab('super-admin');
+    } else {
+      if (activeTab === 'super-admin') setActiveTab('chats');
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     fetchConversations({ status: 'open' });
     fetchQueue();
   }, []);
 
-  // Real-time queue notification
   useEffect(() => {
     if (!socket) return;
     const handler = (data) => {
@@ -46,6 +60,15 @@ export default function DashboardPage() {
     return () => socket.off('queue_new_conversation', handler);
   }, [socket]);
 
+  const handleTabChange = (tab) => {
+    if (tab === 'super-admin') {
+      navigate('/super-admin');
+    } else {
+      if (location.pathname === '/super-admin') navigate('/');
+      setActiveTab(tab);
+    }
+  };
+
   const handleSelect = async (conv) => {
     if (activeConversation) leaveConversationRoom(activeConversation.id);
     setActiveConversation(conv);
@@ -54,12 +77,15 @@ export default function DashboardPage() {
   };
 
   const renderMain = () => {
-    if (activeTab === 'templates') return <TemplatesPage />;
-    if (activeTab === 'settings') return <SettingsPage />;
-    if (activeTab === 'team') return <TeamPage />;
-    if (activeTab === 'analytics') return <AnalyticsPage />;
-    if (activeTab === 'contacts') return <ContactsPage />;
-    if (activeTab === 'broadcasts') return <BroadcastsPage />;
+    if (activeTab === 'super-admin') return <SuperAdminPage />;
+    if (activeTab === 'templates')   return <TemplatesPage />;
+    if (activeTab === 'settings')    return <SettingsPage />;
+    if (activeTab === 'team')        return <TeamPage />;
+    if (activeTab === 'analytics')   return <AnalyticsPage />;
+    if (activeTab === 'contacts')    return <ContactsPage />;
+    if (activeTab === 'broadcasts')  return <BroadcastsPage />;
+    if (activeTab === 'flows')       return <FlowsPage />;
+    if (activeTab === 'commerce')    return <CommercePage />;
     return activeConversation ? <ChatWindow conversation={activeConversation} /> : <EmptyState />;
   };
 
@@ -67,8 +93,8 @@ export default function DashboardPage() {
 
   return (
     <div style={{display:'flex', height:'100vh', background:'#0b0e14', overflow:'hidden', color:'#e2e8f0', flexDirection:'row'}}>
-      {!isMobile && <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />}
-      {(!isMobile || (isMobile && activeTab === 'chats' && !activeConversation)) && activeTab !== 'team' && activeTab !== 'templates' && activeTab !== 'settings' && activeTab !== 'contacts' && activeTab !== 'broadcasts' && (
+      {!isMobile && <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />}
+      {activeTab === 'chats' && (
         <ConversationList
           conversations={conversations}
           activeId={activeConversation?.id}
@@ -78,12 +104,7 @@ export default function DashboardPage() {
       <div style={{flex:1, display:'flex', flexDirection:'column', overflow:'hidden', paddingBottom: isMobile ? '64px' : '0'}}>
         {renderMain()}
       </div>
-      {isMobile && <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />}
+      {isMobile && <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />}
     </div>
   );
 }
-
-const s = {
-  root:{ display:'flex', height:'100vh', background:'#0b0e14', overflow:'hidden', color:'#e2e8f0' },
-  main:{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' },
-};

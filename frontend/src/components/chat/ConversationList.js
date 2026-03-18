@@ -12,7 +12,7 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
 
   const openTemplates = async () => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/templates', {
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/templates', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -32,7 +32,7 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
       (selectedTpl.variables||[]).forEach((v,i) => {
         body = body.replace('{{' + (i+1) + '}}', tplVars[i]||'');
       });
-      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/messages/send-template', {
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/messages/send-template', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: activeId, templateId: selectedTpl.id, variables: tplVars }),
@@ -51,7 +51,7 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
     setFilter(f);
     if (f === 'queue') {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/conversations/queue/list', {
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/conversations/queue/list', {
         headers: { Authorization: 'Bearer ' + token }
       });
       const data = await res.json();
@@ -186,7 +186,7 @@ export default function ConversationList({ conversations, activeId, onSelect }) 
                     <button onClick={async (e) => {
                       e.stopPropagation();
                       const token = localStorage.getItem('accessToken');
-                      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/conversations/' + conv.id + '/claim', {
+                      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/conversations/' + conv.id + '/claim', {
                         method: 'POST',
                         headers: { Authorization: 'Bearer ' + token }
                       });

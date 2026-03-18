@@ -1,4 +1,4 @@
-import { socketInstance } from '../../hooks/useSocket';
+import { socketInstance, useSocket } from '../../hooks/useSocket';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import ContactPanel from './ContactPanel';
@@ -9,6 +9,8 @@ const API_BASE = process.env.REACT_APP_API_URL || '';
 
 const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','😅','😭','😱','🎉','👍','👎','❤️','🔥','✅','💯','🙏','😊','🤣','😘','😤','🥳','😴','🤯','👀','💪','🎯','🚀','💡','⚡','😆','😋','😜','🤩','🥺','😏','😒','😔','😪','🤗','🤭','🤫','🤨','😐','😑','😶','😇','🥱','🤤','😵','🤪','😳','🥴','😠','😡','🤬','😈','💀','💩','🤡','👻','👽','🤖','😺','😸','😹','😻','😼','😽','🙀','😿','😾','🙈','🙉','🙊','💋','💌','💘','💝','💖','💗','💓','💞','💕','💟','❣️','💔','🖤','💜','💙','💚','💛','🧡','🤍','🤎','💢','💥','💫','💦','💨','🕳️','💬','💭','🗯️','💤','💮','♨️','🌸','💐','🌹','🥀','🌺','🌻','🌼','🌷','🌱','🌿','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌾','💧','🌊','🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜','🦟','🦗','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐈','🐓','🦃','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦦','🦥','🐁','🐀','🐿️','🦔','🐾','🐉','🐲','🌵','🎄','🌲','🌳','🌴','🌾','🌱','🌿','☘️','🍀','🎍','🎋','🍃','🍂','🍁','🍄','🌰','🦔','🌏','🌍','🌎','🌐','🗺️','🧭','🏔️','⛰️','🌋','🗻','🏕️','🏖️','🏜️','🏝️','🏞️','🏟️','🏛️','🏗️','🏘️','🏙️','🏚️','🏠','🏡','🏢','🏣','🏤','🏥','🏦','🏨','🏩','🏪','🏫','🏬','🏭','🏯','🏰','💒','🗼','🗽','⛪','🕌','🛕','🕍','⛩️','🕋','⛲','⛺','🌁','🌃','🌄','🌅','🌆','🌇','🌉','♨️','🌌','🌠','🎇','🎆','🌈','🌤️','⛅','🌥️','☁️','🌦️','🌧️','⛈️','🌩️','🌨️','❄️','☃️','⛄','🌬️','💨','💧','💦','🌊','🌀','🌪️','🌫️','🌈'];
 
+import RichBar from './RichBar';
+import api from '../../services/api';
 export default function ChatWindow({ conversation }) {
   const [text, setText]               = useState('');
   const [showEmoji, setShowEmoji]     = useState(false);
@@ -22,6 +24,7 @@ export default function ChatWindow({ conversation }) {
   const [showProfile, setShowProfile]   = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showNotes, setShowNotes]       = useState(false);
+  const [showCatalogue, setShowCatalogue] = useState(false);
   const [agents, setAgents]             = useState([]);
   const [transferNote, setTransferNote] = useState('');
   const [transferTarget, setTransferTarget] = useState('');
@@ -45,9 +48,9 @@ export default function ChatWindow({ conversation }) {
   const inputRef  = useRef(null);
   const fileRef       = useRef(null);
 
-  const { messagesByConv, sendMessage } = useMessageStore();
+  const messages = useMessageStore((s) => s.messagesByConv[conversation.id] || []);
+  const sendMessage = useMessageStore((s) => s.sendMessage);
   const { toggleAutomation, closeConversation } = useConversationStore();
-  const messages = messagesByConv[conversation.id] || [];
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages.length]);
   useEffect(() => {
@@ -59,6 +62,9 @@ export default function ChatWindow({ conversation }) {
     setNotes([]);
     setShowNotes(false);
   }, [conversation.id]);
+
+  // Realtime messages are handled globally in useSocket hook via addMessage → store
+  // No local socket listener needed here
 
   // Realtime notes via socket
   useEffect(() => {
@@ -157,7 +163,7 @@ export default function ChatWindow({ conversation }) {
   // ── Load agents for transfer ──────────────────────────────
   const openTransfer = async () => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/team', {
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/team', {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -170,7 +176,7 @@ export default function ChatWindow({ conversation }) {
     setTransferring(true);
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/conversations/' + conversation.id + '/transfer', {
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/conversations/' + conversation.id + '/transfer', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent_id: transferTarget, note: transferNote })
@@ -183,7 +189,7 @@ export default function ChatWindow({ conversation }) {
   // ── Load notes ─────────────────────────────────────────────
   const openNotes = async () => {
     const token = localStorage.getItem('accessToken');
-    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/notes/' + conversation.id, {
+    const res = await fetch((process.env.REACT_APP_API_URL||'') + '/notes/' + conversation.id, {
       headers: { Authorization: 'Bearer ' + token }
     });
     const data = await res.json();
@@ -196,7 +202,7 @@ export default function ChatWindow({ conversation }) {
     setAddingNote(true);
     try {
       const token = localStorage.getItem('accessToken');
-      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/api/notes/' + conversation.id, {
+      const res = await fetch((process.env.REACT_APP_API_URL||'') + '/notes/' + conversation.id, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: noteText })
@@ -469,12 +475,21 @@ export default function ChatWindow({ conversation }) {
               </button>
               <input ref={fileRef} type="file" style={{display:'none'}} onChange={handleFile}
                 accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"/>
+              <RichBar conversationId={conversation.id} onSent={()=>{}} />
               <button style={s.toolBtn} title="Attach file" onClick={()=>fileRef.current?.click()} disabled={isExpired||!!audioBlob}>
                 <AttachIcon/>
               </button>
-              <button style={{...s.toolBtn, fontSize:'11px', fontWeight:'700', color:'#00d4b8', letterSpacing:'-0.5px'}}
+              <button style={{...s.toolBtn, fontSize:'13px', fontWeight:'700'}}
                 title="Canned Responses (or type /)" onClick={()=>{ setCannedSearch(''); openCanned(''); }}>
                 /
+              </button>
+              <button style={{...s.toolBtn}} title="Product Catalogue"
+                onClick={()=>setShowCatalogue(true)} disabled={isExpired}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/>
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <path d="M16 10a4 4 0 01-8 0"/>
+                </svg>
               </button>
               <div style={s.inputWrap}
                 onFocus={e=>e.currentTarget.style.borderColor='#00d4b8'}
@@ -638,6 +653,12 @@ export default function ChatWindow({ conversation }) {
         ))}
       </div>
     )}
+    {showCatalogue && (
+      <CatalogueModal
+        conversation={conversation}
+        onClose={()=>setShowCatalogue(false)}
+      />
+    )}
     </>
   );
 }
@@ -730,6 +751,13 @@ function ImageMessage({ mediaId }) {
 
   useEffect(()=>{
     if (!mediaId) return;
+    // Local file served directly
+    if (mediaId.startsWith('/rich/files/') || mediaId.startsWith('/uploads/') || mediaId.startsWith('http')) {
+      const base = (process.env.REACT_APP_API_URL||'').replace(/\/+$/,'');
+      setUrl(mediaId.startsWith('http') ? mediaId : base + mediaId);
+      return;
+    }
+    // WA media ID - fetch via our proxy
     setLoading(true);
     const token = localStorage.getItem('accessToken');
     fetch(`${API_BASE}/api/media/${mediaId}`,{ headers:{ Authorization:`Bearer ${token}` }})
@@ -769,7 +797,8 @@ function Bubble({ msg, initials, avatarColor, searchQuery }) {
   const isAI    = msg.is_ai||msg.source==='ai';
   const isVoice = msg.type==='audio';
   const isImage = msg.type==='image';
-  const isDoc   = msg.type==='document'||msg.type==='video';
+  const isDoc   = msg.type==='document';
+  const isVideo  = msg.type==='video';
   const time    = format(new Date(msg.timestamp||msg.created_at),'HH:mm');
 
   const bubbleStyle = out
@@ -788,6 +817,12 @@ function Bubble({ msg, initials, avatarColor, searchQuery }) {
         <div style={mediaStyle}>
 {isVoice && <VoicePlayer mediaId={msg.media_url} isOutgoing={out}/>}
           {isImage && <ImageMessage mediaId={msg.media_url}/>}
+          {isVideo && msg.media_url && (
+            msg.media_url.startsWith('/rich/files/') || msg.media_url.startsWith('http') ? (
+              <video controls style={{maxWidth:'260px',borderRadius:'10px',display:'block'}}
+                src={msg.media_url.startsWith('http') ? msg.media_url : (process.env.REACT_APP_API_URL||'') + msg.media_url}/>
+            ) : <div style={{padding:'8px 12px',color:'#8696a0',fontSize:'12px'}}>🎬 Video</div>
+          )}
           {isDoc   && (
             <div style={{display:'flex',alignItems:'center',gap:'10px',padding:'4px 6px'}}>
               <div style={{width:'36px',height:'36px',borderRadius:'8px',background:'rgba(0,212,184,.15)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><FileIcon/></div>
@@ -886,3 +921,65 @@ const s={
   textarea:{width:'100%',background:'transparent',border:'none',outline:'none',color:'#edf2f8',fontSize:'13px',lineHeight:'1.5',minHeight:'22px',maxHeight:'110px',overflowY:'auto'},
   sendBtn:{width:'40px',height:'40px',borderRadius:'50%',border:'none',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s',flexShrink:0},
 };
+
+// ── Catalogue Modal ───────────────────────────────────────────────────────────
+function CatalogueModal({ conversation, onClose }) {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [sending, setSending]   = useState(null);
+  const [msg, setMsg]           = useState('');
+
+  useEffect(() => {
+    api.get('/commerce/products')
+      .then(r => setProducts(r.data))
+      .catch(() => setMsg('Failed to load products'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const sendProduct = async (p) => {
+    setSending(p.id);
+    try {
+      await api.post(`/commerce/products/${p.id}/send`, {
+        conversationId: conversation.id,
+      });
+      setMsg('✅ Product sent!');
+      setTimeout(() => { setMsg(''); onClose(); }, 1500);
+    } catch {
+      setMsg('❌ Failed to send');
+    } finally {
+      setSending(null);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#0a1520',border:'1px solid rgba(255,255,255,0.1)',borderRadius:14,width:480,maxHeight:'80vh',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{padding:'16px 20px',borderBottom:'1px solid rgba(255,255,255,0.07)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{color:'#edf2f8',fontWeight:700,fontSize:16,display:'flex',alignItems:'center',gap:8}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+            Product Catalogue
+          </span>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'#7a95af',cursor:'pointer',fontSize:20}}>✕</button>
+        </div>
+        <div style={{overflowY:'auto',padding:16,display:'flex',flexDirection:'column',gap:10}}>
+          {loading && <div style={{color:'#7a95af',textAlign:'center',padding:40}}>Loading products...</div>}
+          {!loading && products.length === 0 && <div style={{color:'#7a95af',textAlign:'center',padding:40}}>No products found</div>}
+          {products.map(p => (
+            <div key={p.id} style={{background:'#0f1e2e',border:'1px solid rgba(255,255,255,0.07)',borderRadius:10,padding:'12px 14px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+              <div style={{flex:1}}>
+                <div style={{color:'#edf2f8',fontWeight:600,fontSize:14}}>{p.name}</div>
+                {p.description && <div style={{color:'#7a95af',fontSize:12,marginTop:2}}>{p.description}</div>}
+                <div style={{color:'#00d4b8',fontWeight:700,fontSize:13,marginTop:4}}>PKR {Number(p.price).toLocaleString()}</div>
+              </div>
+              <button onClick={()=>sendProduct(p)} disabled={sending===p.id}
+                style={{padding:'7px 14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#00d4b8,#00b8a0)',color:'#070b11',fontWeight:700,fontSize:12,cursor:'pointer',flexShrink:0}}>
+                {sending===p.id ? '...' : 'Send'}
+              </button>
+            </div>
+          ))}
+        </div>
+        {msg && <div style={{padding:'10px 20px',borderTop:'1px solid rgba(255,255,255,0.07)',color:'#00d4b8',fontSize:13,textAlign:'center'}}>{msg}</div>}
+      </div>
+    </div>
+  );
+}

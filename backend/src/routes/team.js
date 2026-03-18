@@ -9,11 +9,8 @@ const router = express.Router();
 // GET /api/team — list all team members
 router.get('/', authenticateToken, requireRole('super_admin', 'admin'), async (req, res, next) => {
   try {
-    const result = await query(
-      `SELECT id, email, name, role, status, last_active, avatar_url, is_active, created_at
-       FROM users WHERE is_active = true ORDER BY created_at ASC`
-    );
-    res.json({ team: result.rows });
+    const teamResult = await query(`SELECT id, email, name, role, status, last_active, avatar_url, is_active, created_at FROM users WHERE is_active = true AND workspace_id=$1 ORDER BY created_at ASC`, [req.workspaceId]);
+    res.json({ team: teamResult.rows });
   } catch (err) { next(err); }
 });
 
@@ -27,10 +24,10 @@ router.post('/invite', authenticateToken, requireRole('super_admin', 'admin'),
 
     try {
       const { email, role } = req.body;
-      const workspace_id = 'default';
+      const workspace_id = req.workspaceId;
 
       // Check if user already exists
-      const existing = await query('SELECT id FROM users WHERE email = $1 AND is_active = true', [email]);
+      const existing = await query('SELECT id FROM users WHERE email = $1 AND is_active = true AND workspace_id=$2', [email, req.workspaceId]);
       if (existing.rows.length > 0) {
         return res.status(409).json({ error: 'User with this email already exists' });
       }
@@ -120,9 +117,9 @@ router.post('/invites/accept',
 
       // Create user
       const userResult = await query(
-        `INSERT INTO users (email, name, password_hash, role, status)
-         VALUES ($1, $2, $3, $4, 'offline') RETURNING id, email, name, role`,
-        [invite.email, name, password_hash, invite.role]
+        `INSERT INTO users (email, name, password_hash, role, status, workspace_id)
+         VALUES ($1, $2, $3, $4, 'offline', $5) RETURNING id, email, name, role`,
+        [invite.email, name, password_hash, invite.role, invite.workspace_id]
       );
 
       const newUser = userResult.rows[0];
@@ -146,8 +143,8 @@ router.patch('/:id/role', authenticateToken, requireRole('super_admin'),
 
     try {
       const result = await query(
-        'UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, name, role',
-        [req.body.role, req.params.id]
+        'UPDATE users SET role = $1 WHERE id = $2 AND workspace_id=$3 RETURNING id, email, name, role',
+        [req.body.role, req.params.id, req.workspaceId]
       );
       if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
@@ -186,7 +183,7 @@ router.delete('/:id', authenticateToken, requireRole('super_admin'),
       if (req.user.id === req.params.id) {
         return res.status(400).json({ error: 'Cannot deactivate yourself' });
       }
-      await query('UPDATE users SET is_active = false WHERE id = $1', [req.params.id]);
+      await query('UPDATE users SET is_active = false WHERE id = $1 AND workspace_id=$2', [req.params.id, req.workspaceId]);
       await auditLog(req.user.id, 'user.deactivated', req.params.id, null, req.ip);
       res.json({ message: 'User deactivated' });
     } catch (err) { next(err); }

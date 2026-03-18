@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sanestix Flow Builder — User Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#050810;--bg2:#090e1a;--bg3:#0d1424;--bg4:#121b2e;--bg5:#18243a;--cyan:#00d4b8;--cyan2:#00b89e;--cyan-dim:rgba(0,212,184,.07);--purple:#8b5cf6;--blue:#3b82f6;--green:#10b981;--yellow:#f59e0b;--red:#ef4444;--orange:#f97316;--t1:#edf2f8;--t2:#7d99b5;--t3:#3a5270;--border:rgba(255,255,255,.06);--border2:rgba(255,255,255,.12);--r:10px;--r2:16px;}
+html{scroll-behavior:smooth}
+body{font-family:'Urbanist',sans-serif;background:var(--bg);color:var(--t1);line-height:1.6;overflow-x:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:rgba(0,212,184,.2);border-radius:3px}
+.bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(0,212,184,.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,184,.015) 1px,transparent 1px);background-size:48px 48px}
+.shell{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:40px 24px 80px}
+.hero{text-align:center;padding:48px 0 40px}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,212,184,.08);border:1px solid rgba(0,212,184,.2);border-radius:99px;padding:6px 16px;font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px}
+.hero h1{font-size:clamp(28px,5vw,44px);font-weight:900;letter-spacing:-.02em;line-height:1.1;margin-bottom:12px}
+.hero h1 span{color:var(--cyan)}
+.hero p{font-size:16px;color:var(--t2);max-width:520px;margin:0 auto}
+.toc{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:20px 24px;margin-bottom:40px}
+.toc-title{font-size:11px;font-weight:700;color:var(--cyan);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+.toc-links{display:flex;flex-wrap:wrap;gap:8px}
+.toc-links a{color:var(--t2);text-decoration:none;font-size:13px;font-weight:500;padding:4px 12px;border-radius:6px;border:1px solid var(--border);transition:.15s}
+.toc-links a:hover{color:var(--cyan);border-color:rgba(0,212,184,.3);background:var(--cyan-dim)}
+.sec{margin-bottom:48px}
+.sec-title{font-size:22px;font-weight:800;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.sec-title .num{width:28px;height:28px;border-radius:8px;background:var(--cyan-dim);border:1px solid rgba(0,212,184,.2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--cyan);flex-shrink:0}
+.sec-lead{color:var(--t2);font-size:14px;margin-bottom:20px;padding-left:38px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:16px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.card.cyan::before{background:var(--cyan)}.card.purple::before{background:var(--purple)}.card.yellow::before{background:var(--yellow)}.card.green::before{background:var(--green)}.card.red::before{background:var(--red)}.card.orange::before{background:var(--orange)}
+.card-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.card.cyan .card-icon{background:rgba(0,212,184,.12);color:var(--cyan)}.card.purple .card-icon{background:rgba(139,92,246,.12);color:var(--purple)}.card.yellow .card-icon{background:rgba(245,158,11,.12);color:var(--yellow)}.card.green .card-icon{background:rgba(16,185,129,.12);color:var(--green)}.card.red .card-icon{background:rgba(239,68,68,.12);color:var(--red)}.card.orange .card-icon{background:rgba(249,115,22,.12);color:var(--orange)}
+.card-title{font-size:13px;font-weight:700;margin-bottom:4px}
+.card-body{font-size:12px;color:var(--t2);line-height:1.6}
+.var-box{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:24px;margin-bottom:20px}
+.var-format{display:flex;align-items:center;gap:12px;background:var(--bg4);border:1px solid rgba(0,212,184,.15);border-radius:10px;padding:14px 18px;margin:16px 0;font-family:'JetBrains Mono',monospace}
+.var-format .brace{color:var(--cyan);font-size:20px;font-weight:700}.var-format .name{color:#e2e8f0;font-size:16px;font-weight:600}.var-format .arrow{color:var(--t3);font-size:13px;margin:0 4px}.var-format .desc{color:var(--t2);font-size:12px}
+.example-row{display:flex;align-items:flex-start;gap:16px;padding:12px 0;border-bottom:1px solid var(--border)}
+.example-row:last-child{border:none}
+.ex-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:5px;flex-shrink:0;margin-top:2px}
+.ex-label.node{background:rgba(99,102,241,.15);color:#818cf8}.ex-label.var{background:rgba(0,212,184,.1);color:var(--cyan)}.ex-label.msg{background:rgba(16,185,129,.1);color:var(--green)}
+.ex-code{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--t1);background:var(--bg4);padding:6px 12px;border-radius:7px;border:1px solid var(--border)}
+.ex-code .hi{color:var(--cyan)}
+.flow-diagram{display:flex;flex-direction:column;align-items:center;gap:0;margin:20px 0;padding:24px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2)}
+.flow-node{padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;border:1.5px solid;min-width:200px;text-align:center;position:relative}
+.flow-node.trigger{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.08);color:#fbbf24}.flow-node.capture{border-color:rgba(99,102,241,.4);background:rgba(99,102,241,.08);color:#a5b4fc}.flow-node.send{border-color:rgba(0,212,184,.4);background:rgba(0,212,184,.08);color:var(--cyan)}.flow-node.end{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:#fca5a5}
+.flow-arrow{display:flex;flex-direction:column;align-items:center;padding:4px 0}
+.flow-arrow svg{color:var(--t3)}
+.flow-node-badge{position:absolute;top:-9px;right:10px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;text-transform:uppercase;letter-spacing:.06em}
+.flow-node.trigger .flow-node-badge{background:rgba(245,158,11,.2);color:#fbbf24}.flow-node.capture .flow-node-badge{background:rgba(99,102,241,.2);color:#a5b4fc}.flow-node.send .flow-node-badge{background:rgba(0,212,184,.15);color:var(--cyan)}.flow-node.end .flow-node-badge{background:rgba(239,68,68,.15);color:#fca5a5}
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}
+.step:last-child{border:none}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--cyan-dim);border:1.5px solid rgba(0,212,184,.3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:var(--cyan);flex-shrink:0;margin-top:2px}
+.step-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.step-desc{font-size:13px;color:var(--t2);line-height:1.6}
+.step-desc code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--bg4);padding:2px 6px;border-radius:4px;color:var(--cyan);border:1px solid rgba(0,212,184,.15)}
+.callout{display:flex;gap:12px;padding:14px 16px;border-radius:10px;margin:16px 0;font-size:13px;line-height:1.6}
+.callout.info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:#93c5fd}.callout.warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#fcd34d}.callout.success{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:#6ee7b7}
+.callout-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.tw{overflow-x:auto;margin:16px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--bg4);padding:10px 14px;text-align:left;font-weight:700;border:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--t2)}
+td{padding:10px 14px;border:1px solid var(--border);vertical-align:top}
+tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+td code{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--bg4);padding:2px 6px;border-radius:4px;color:var(--cyan)}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700}
+.badge.cyan{background:rgba(0,212,184,.1);color:var(--cyan)}.badge.purple{background:rgba(139,92,246,.1);color:var(--purple)}.badge.yellow{background:rgba(245,158,11,.1);color:var(--yellow)}
+.divider{height:1px;background:var(--border);margin:40px 0}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="shell">
+  <div class="hero">
+    <div class="hero-badge">Flow Builder Guide</div>
+    <h1>Build WhatsApp Automations<br/><span>Without Code</span></h1>
+    <p>A complete reference for creating flows, using variables, connecting nodes, and testing your chatbot.</p>
+  </div>
+  <div class="toc">
+    <div class="toc-title">Contents</div>
+    <div class="toc-links">
+      <a href="#nodes">Node Types</a>
+      <a href="#variables">Variables</a>
+      <a href="#flow">Building a Flow</a>
+      <a href="#triggers">Triggers</a>
+      <a href="#examples">Examples</a>
+      <a href="#tips">Tips &amp; Rules</a>
+    </div>
+  </div>
+  <div class="sec" id="nodes">
+    <div class="sec-title"><div class="num">1</div> Node Types</div>
+    <div class="sec-lead">Each node does one job. Connect them together to build your automation.</div>
+    <div class="cards">
+      <div class="card cyan"><div class="card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div><div class="card-title">Send Message</div><div class="card-body">Sends a text message to the contact. Supports variables like <code>{name}</code>. Automatically moves to the next node.</div></div>
+      <div class="card purple"><div class="card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></div><div class="card-title">Capture Input</div><div class="card-body">Sends a prompt and WAITS for the contact's reply. Saves the reply as a named variable (e.g. <code>name</code>, <code>order_id</code>).</div></div>
+      <div class="card yellow"><div class="card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/></svg></div><div class="card-title">Condition</div><div class="card-body">Checks a variable value. If condition is met, goes one way; otherwise the other. Used for branching logic.</div></div>
+      <div class="card purple"><div class="card-icon" style="background:rgba(139,92,246,.12);color:var(--purple)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="card-title">Delay</div><div class="card-body">Waits a set number of seconds before moving to the next node. Useful for pacing conversations naturally.</div></div>
+      <div class="card green"><div class="card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="card-title">Human Handoff</div><div class="card-body">Pauses automation and routes the conversation to a human agent. Optionally sends a message before handing off.</div></div>
+      <div class="card orange"><div class="card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div><div class="card-title">AI Reply</div><div class="card-body">Hands the conversation back to the AI assistant. The flow ends and normal AI responses resume.</div></div>
+      <div class="card red"><div class="card-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="card-title">End Flow</div><div class="card-body">Ends the automation session. Optionally sends a final message. Always add this as the last node.</div></div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="sec" id="variables">
+    <div class="sec-title"><div class="num">2</div> Variables — How to Use Them</div>
+    <div class="sec-lead">Variables let you capture what the contact says and use it later in messages.</div>
+    <div class="var-box">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--t2);text-transform:uppercase;letter-spacing:.05em">Variable Format</div>
+      <div class="var-format"><span class="brace">{</span><span class="name">variable_name</span><span class="brace">}</span><span class="arrow">—</span><span class="desc">Use curly braces. No spaces. Lowercase only.</span></div>
+      <div class="callout info"><span class="callout-icon">ℹ️</span><div>Variable names must match exactly between the <strong>Capture Input</strong> node (where you define it) and the <strong>Send Message</strong> node (where you use it). Case-sensitive.</div></div>
+      <div style="margin-top:20px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:12px">Step-by-step example</div>
+        <div class="example-row"><span class="ex-label node">Step 1</span><div><div style="font-size:13px;font-weight:600;margin-bottom:4px">Add a Capture Input node</div><div style="font-size:12px;color:var(--t2)">Prompt: <span class="ex-code">What is your name?</span></div><div style="font-size:12px;color:var(--t2);margin-top:4px">Variable Name: <span class="ex-code"><span class="hi">name</span></span></div></div></div>
+        <div class="example-row"><span class="ex-label var">Step 2</span><div><div style="font-size:13px;font-weight:600;margin-bottom:4px">Contact replies</div><div style="font-size:12px;color:var(--t2)">Contact sends: <span class="ex-code">Ahmed</span></div><div style="font-size:12px;color:var(--t2);margin-top:4px">System stores: <span class="ex-code"><span class="hi">{name}</span> = "Ahmed"</span></div></div></div>
+        <div class="example-row"><span class="ex-label msg">Step 3</span><div><div style="font-size:13px;font-weight:600;margin-bottom:4px">Add a Send Message node</div><div style="font-size:12px;color:var(--t2)">Message: <span class="ex-code">Hi <span class="hi">{name}</span>, welcome to our store!</span></div><div style="font-size:12px;color:var(--t2);margin-top:4px">Contact receives: <span class="ex-code">Hi Ahmed, welcome to our store!</span></div></div></div>
+      </div>
+    </div>
+    <div class="tw"><table><thead><tr><th>Variable Name</th><th>Capture Input Field</th><th>Use in Message</th><th>Example Output</th></tr></thead><tbody><tr><td><code>name</code></td><td>Variable Name: <code>name</code></td><td><code>{name}</code></td><td>Hi Ahmed</td></tr><tr><td><code>order_id</code></td><td>Variable Name: <code>order_id</code></td><td><code>{order_id}</code></td><td>Order #1234</td></tr><tr><td><code>phone</code></td><td>Variable Name: <code>phone</code></td><td><code>{phone}</code></td><td>+92 300 123 4567</td></tr><tr><td><code>city</code></td><td>Variable Name: <code>city</code></td><td><code>Delivering to {city}</code></td><td>Delivering to Lahore</td></tr></tbody></table></div>
+    <div class="callout warn"><span class="callout-icon">⚠️</span><div><strong>Common mistakes:</strong> Using <code>{ name }</code> (spaces inside braces) or <code>{Name}</code> (capital N) will NOT work. Must be exactly <code>{name}</code>.</div></div>
+  </div>
+  <div class="divider"></div>
+  <div class="sec" id="flow">
+    <div class="sec-title"><div class="num">3</div> Building a Flow — Step by Step</div>
+    <div class="sec-lead">From empty canvas to working automation in 5 minutes.</div>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Create the flow</div><div class="step-desc">Click <strong>+ New Flow</strong>, give it a name, choose a trigger type (Keyword, First Message, or Button Reply), and enter the trigger value if needed.</div></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Add nodes from the left panel</div><div class="step-desc">Click any node type in the left panel to add it to the canvas. Nodes appear in the center — drag them to reposition.</div></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Configure each node</div><div class="step-desc">Click a node on the canvas to open its config panel on the right. Fill in the message text, variable name, delay, etc. Click <strong>Save Node</strong>.</div></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><div class="step-title">Connect the nodes</div><div class="step-desc">Hover over the <strong>bottom dot</strong> of a node — cursor changes to a crosshair. Drag from that dot to the <strong>top dot</strong> of the next node.</div></div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body"><div class="step-title">Save the flow</div><div class="step-desc">Click the <strong>Save</strong> button in the top-right. You'll see "Flow saved!" if successful.</div></div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-body"><div class="step-title">Activate the flow</div><div class="step-desc">Click <strong>Activate</strong>. The status dot turns green. The flow is now live.</div></div></div>
+    </div>
+    <div style="margin-top:24px">
+      <div style="font-size:12px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">Visual Flow Example</div>
+      <div class="flow-diagram">
+        <div class="flow-node trigger"><div class="flow-node-badge">Trigger</div>Keyword: "order"</div>
+        <div class="flow-arrow"><svg width="16" height="20" viewBox="0 0 16 20" fill="none"><line x1="8" y1="0" x2="8" y2="16" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3,3"/><polyline points="4,13 8,19 12,13" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>
+        <div class="flow-node capture"><div class="flow-node-badge">Capture Input</div>Prompt: "What is your order ID?" | Variable: <code style="font-family:monospace;font-size:11px">order_id</code></div>
+        <div class="flow-arrow"><svg width="16" height="20" viewBox="0 0 16 20" fill="none"><line x1="8" y1="0" x2="8" y2="16" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3,3"/><polyline points="4,13 8,19 12,13" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>
+        <div class="flow-node send"><div class="flow-node-badge">Send Message</div>"Got it! Checking order <code style="font-family:monospace;font-size:11px">{order_id}</code> for you..."</div>
+        <div class="flow-arrow"><svg width="16" height="20" viewBox="0 0 16 20" fill="none"><line x1="8" y1="0" x2="8" y2="16" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3,3"/><polyline points="4,13 8,19 12,13" stroke="currentColor" stroke-width="1.5" fill="none"/></svg></div>
+        <div class="flow-node end"><div class="flow-node-badge">End Flow</div>Final message: "Thank you! Our team will follow up shortly."</div>
+      </div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="sec" id="triggers">
+    <div class="sec-title"><div class="num">4</div> Trigger Types</div>
+    <div class="sec-lead">Choose how your flow starts when a contact messages you.</div>
+    <div class="tw"><table><thead><tr><th>Trigger</th><th>When it fires</th><th>Trigger Value</th><th>Example</th></tr></thead><tbody><tr><td><span class="badge yellow">Keyword</span></td><td>Contact's message contains the keyword</td><td>The keyword to match (e.g. <code>order</code>)</td><td>Contact sends "check order status" → matches keyword "order"</td></tr><tr><td><span class="badge cyan">First Message</span></td><td>First time a contact ever messages you</td><td>Not required</td><td>New contact sends any message → welcome flow starts</td></tr><tr><td><span class="badge purple">Button Reply</span></td><td>Contact taps a WhatsApp button</td><td>The button payload/text to match</td><td>Contact taps "Track Order" button → flow starts</td></tr></tbody></table></div>
+    <div class="callout success"><span class="callout-icon">✓</span><div><strong>Keyword tip:</strong> The keyword match is case-insensitive and checks if the message CONTAINS the keyword. "check ORDER status" will match keyword "order".</div></div>
+  </div>
+  <div class="divider"></div>
+  <div class="sec" id="examples">
+    <div class="sec-title"><div class="num">5</div> Ready-to-Use Examples</div>
+    <div class="sec-lead">Copy these patterns to build your first flows quickly.</div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="var-box"><div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--cyan)">Order Status Bot</div><div style="font-size:12px;color:var(--t2);margin-bottom:14px">Trigger: keyword "order"</div><div class="example-row"><span class="ex-label node">Node 1</span><div><strong>Capture Input</strong> — Prompt: <span class="ex-code">Please share your order ID:</span> — Variable: <span class="ex-code"><span class="hi">order_id</span></span></div></div><div class="example-row"><span class="ex-label node">Node 2</span><div><strong>Send Message</strong> — <span class="ex-code">Checking order <span class="hi">{order_id}</span>... please wait.</span></div></div><div class="example-row"><span class="ex-label node">Node 3</span><div><strong>Human Handoff</strong> — Message: <span class="ex-code">Our team will update you on order <span class="hi">{order_id}</span> shortly!</span></div></div></div>
+      <div class="var-box"><div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--cyan)">Welcome New Contact</div><div style="font-size:12px;color:var(--t2);margin-bottom:14px">Trigger: first_message</div><div class="example-row"><span class="ex-label node">Node 1</span><div><strong>Send Message</strong> — <span class="ex-code">Welcome! I'm the Sanestix assistant. How can I help?</span></div></div><div class="example-row"><span class="ex-label node">Node 2</span><div><strong>Capture Input</strong> — Prompt: <span class="ex-code">What's your name?</span> — Variable: <span class="ex-code"><span class="hi">name</span></span></div></div><div class="example-row"><span class="ex-label node">Node 3</span><div><strong>Send Message</strong> — <span class="ex-code">Nice to meet you, <span class="hi">{name}</span>! Ask me anything.</span></div></div><div class="example-row"><span class="ex-label node">Node 4</span><div><strong>AI Reply</strong> — hands conversation back to AI</div></div></div>
+      <div class="var-box"><div style="font-size:14px;font-weight:700;margin-bottom:4px;color:var(--cyan)">Appointment Booking</div><div style="font-size:12px;color:var(--t2);margin-bottom:14px">Trigger: keyword "book"</div><div class="example-row"><span class="ex-label node">Node 1</span><div><strong>Capture Input</strong> — Prompt: <span class="ex-code">What's your full name?</span> — Variable: <span class="ex-code"><span class="hi">name</span></span></div></div><div class="example-row"><span class="ex-label node">Node 2</span><div><strong>Capture Input</strong> — Prompt: <span class="ex-code">What date works for you?</span> — Variable: <span class="ex-code"><span class="hi">date</span></span></div></div><div class="example-row"><span class="ex-label node">Node 3</span><div><strong>Send Message</strong> — <span class="ex-code">Confirmed for <span class="hi">{name}</span> on <span class="hi">{date}</span>.</span></div></div><div class="example-row"><span class="ex-label node">Node 4</span><div><strong>End Flow</strong> — Message: <span class="ex-code">See you then!</span></div></div></div>
+    </div>
+  </div>
+  <div class="divider"></div>
+  <div class="sec" id="tips">
+    <div class="sec-title"><div class="num">6</div> Tips &amp; Rules</div>
+    <div class="sec-lead">Things to keep in mind for flows that work reliably.</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="callout success"><span class="callout-icon">✓</span><div><strong>Always end with End Flow node.</strong> Without it, the session stays open forever.</div></div>
+      <div class="callout success"><span class="callout-icon">✓</span><div><strong>Connect every node.</strong> Drag from the bottom dot to the top dot of the next node.</div></div>
+      <div class="callout success"><span class="callout-icon">✓</span><div><strong>Save Node first, then Save Flow.</strong> Click "Save Node" after editing, then "Save" in the top bar.</div></div>
+      <div class="callout warn"><span class="callout-icon">⚠️</span><div><strong>Variable names: no spaces, no capitals.</strong> Use <code>order_id</code> not <code>Order ID</code>.</div></div>
+      <div class="callout warn"><span class="callout-icon">⚠️</span><div><strong>Capture Input waits for ONE reply.</strong> The contact's next message is captured as the variable.</div></div>
+      <div class="callout info"><span class="callout-icon">ℹ️</span><div><strong>Sending keyword again restarts the flow.</strong> Current session ends and flow restarts from beginning.</div></div>
+      <div class="callout info"><span class="callout-icon">ℹ️</span><div><strong>Flow messages appear in chat.</strong> All bot messages show up in the Sanestix chat window in real-time.</div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

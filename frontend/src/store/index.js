@@ -10,7 +10,7 @@ export const useAuthStore = create((set) => ({
   login: async (email, password) => {
     set({ loading: true, error: null });
     try {
-      const res = await api.post('/api/auth/login', { email, password });
+      const res = await api.post('/auth/login', { email, password });
       const { accessToken, refreshToken, user } = res.data;
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
@@ -24,7 +24,7 @@ export const useAuthStore = create((set) => ({
   },
 
   logout: async () => {
-    try { await api.post('/api/auth/logout'); } catch {}
+    try { await api.post('/auth/logout'); } catch {}
     localStorage.clear();
     set({ user: null });
   },
@@ -40,7 +40,7 @@ export const useConversationStore = create((set) => ({
   fetchConversations: async (params = {}) => {
     set({ loading: true });
     try {
-      const res = await api.get('/api/conversations', { params: { limit: 30, ...params } });
+      const res = await api.get('/conversations', { params: { limit: 30, ...params } });
       set({ conversations: res.data.conversations, total: res.data.total, loading: false });
     } catch { set({ loading: false }); }
   },
@@ -48,7 +48,7 @@ export const useConversationStore = create((set) => ({
   setActiveConversation: async (conv) => {
     set({ activeConversation: conv });
     if (conv) {
-      await api.get(`/api/conversations/${conv.id}`).catch(() => {});
+      await api.get(`/conversations/${conv.id}`).catch(() => {});
       set((s) => ({
         conversations: s.conversations.map((c) =>
           c.id === conv.id ? { ...c, unread_count: 0 } : c
@@ -58,7 +58,7 @@ export const useConversationStore = create((set) => ({
   },
 
   toggleAutomation: async (convId, enabled) => {
-    await api.patch(`/api/conversations/${convId}`, { automation_enabled: enabled });
+    await api.patch(`/conversations/${convId}`, { automation_enabled: enabled });
     set((s) => ({
       conversations: s.conversations.map((c) =>
         c.id === convId ? { ...c, automation_enabled: enabled } : c
@@ -71,7 +71,7 @@ export const useConversationStore = create((set) => ({
   },
 
   closeConversation: async (convId) => {
-    await api.patch(`/api/conversations/${convId}`, { status: 'closed' });
+    await api.patch(`/conversations/${convId}`, { status: 'closed' });
     set((s) => ({
       conversations: s.conversations.filter((c) => c.id !== convId),
       activeConversation: s.activeConversation?.id === convId ? null : s.activeConversation,
@@ -103,7 +103,7 @@ export const useMessageStore = create((set) => ({
   fetchMessages: async (conversationId) => {
     set({ loading: true });
     try {
-      const res = await api.get(`/api/messages/${conversationId}`, { params: { limit: 50 } });
+      const res = await api.get(`/messages/${conversationId}`, { params: { limit: 50 } });
       set((s) => ({
         messagesByConv: { ...s.messagesByConv, [conversationId]: res.data.messages },
         loading: false,
@@ -114,14 +114,8 @@ export const useMessageStore = create((set) => ({
   sendMessage: async (conversationId, text) => {
     set({ sending: true });
     try {
-      const res = await api.post('/api/messages/send', { conversationId, text });
-      set((s) => ({
-        messagesByConv: {
-          ...s.messagesByConv,
-          [conversationId]: [...(s.messagesByConv[conversationId] || []), res.data],
-        },
-        sending: false,
-      }));
+      await api.post('/messages/send', { conversationId, text });
+      set({ sending: false });
       return { ok: true };
     } catch (err) {
       set({ sending: false });
@@ -131,12 +125,16 @@ export const useMessageStore = create((set) => ({
 
   addMessage: (message, conversationId) => {
     const convId = conversationId || message.conversation_id;
-    set((s) => ({
-      messagesByConv: {
-        ...s.messagesByConv,
-        [convId]: [...(s.messagesByConv[convId] || []), message],
-      },
-    }));
+    set((s) => {
+      const existing = s.messagesByConv[convId] || [];
+      if (existing.some((m) => m.id === message.id)) return {};
+      return {
+        messagesByConv: {
+          ...s.messagesByConv,
+          [convId]: [...existing, message],
+        },
+      };
+    });
   },
 
   updateMessageStatus: (messageId, conversationId, status) => {
@@ -164,45 +162,45 @@ export const useTeamStore = create((set) => ({
   fetchTeam: async () => {
     set({ loading: true });
     try {
-      const res = await api.get('/api/team');
+      const res = await api.get('/team');
       set({ team: res.data.team, loading: false });
     } catch { set({ loading: false }); }
   },
 
   fetchQueue: async () => {
     try {
-      const res = await api.get('/api/conversations/queue/list');
+      const res = await api.get('/conversations/queue/list');
       set({ queue: res.data.queue });
     } catch {}
   },
 
   inviteMember: async (email, role) => {
-    const res = await api.post('/api/team/invite', { email, role });
+    const res = await api.post('/team/invite', { email, role });
     return res.data;
   },
 
   changeRole: async (userId, role) => {
-    await api.patch(`/api/team/${userId}/role`, { role });
+    await api.patch(`/team/${userId}/role`, { role });
     set((s) => ({ team: s.team.map((m) => m.id === userId ? { ...m, role } : m) }));
   },
 
   deactivateMember: async (userId) => {
-    await api.delete(`/api/team/${userId}`);
-    const res = await api.get('/api/team');
+    await api.delete(`/team/${userId}`);
+    const res = await api.get('/team');
     set({ team: res.data.members || res.data });
   },
 
   claimConversation: async (convId) => {
-    await api.post(`/api/conversations/${convId}/claim`);
+    await api.post(`/conversations/${convId}/claim`);
     set((s) => ({ queue: s.queue.filter((c) => c.id !== convId) }));
   },
 
   assignConversation: async (convId, agentId) => {
-    await api.post(`/api/conversations/${convId}/assign`, { agent_id: agentId });
+    await api.post(`/conversations/${convId}/assign`, { agent_id: agentId });
     set((s) => ({ queue: s.queue.filter((c) => c.id !== convId) }));
   },
 
   updateMyStatus: async (userId, status) => {
-    await api.patch(`/api/team/${userId}/status`, { status });
+    await api.patch(`/team/${userId}/status`, { status });
   },
 }));

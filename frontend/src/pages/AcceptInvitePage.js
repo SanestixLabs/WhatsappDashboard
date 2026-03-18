@@ -17,7 +17,7 @@ export default function AcceptInvitePage() {
 
   useEffect(() => {
     if (!token) { setError('Invalid invite link'); setLoading(false); return; }
-    api.get(`/api/team/invites/validate/${token}`)
+    api.get(`/team/invites/validate/${token}`)
       .then(res => { setInvite(res.data); setLoading(false); })
       .catch(() => { setError('Invite expired or invalid'); setLoading(false); });
   }, [token]);
@@ -27,7 +27,7 @@ export default function AcceptInvitePage() {
     if (password.length < 6) return toast.error('Password min 6 characters');
     setSubmitting(true);
     try {
-      await api.post('/api/team/invites/accept', { token, name, password });
+      await api.post('/team/invites/accept', { token, name, password });
       toast.success('Account created! Please login.');
       navigate('/login');
     } catch (err) {

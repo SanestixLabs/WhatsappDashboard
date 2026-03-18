@@ -54,7 +54,6 @@ router.post('/login',
         [user.id, hash]
       );
 
-      // Update last login + status to online + last_active
       await query(
         'UPDATE users SET last_login_at = NOW(), status = $1, last_active = NOW() WHERE id = $2',
         ['online', user.id]
@@ -66,12 +65,13 @@ router.post('/login',
         accessToken,
         refreshToken,
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          status: 'online',
-          avatar_url: user.avatar_url
+          id:           user.id,
+          email:        user.email,
+          name:         user.name,
+          role:         user.role,
+          status:       'online',
+          avatar_url:   user.avatar_url,
+          workspace_id: user.workspace_id
         },
       });
     } catch (err) { next(err); }
@@ -131,5 +131,80 @@ router.post('/logout', authenticateToken, async (req, res, next) => {
 router.get('/me', authenticateToken, (req, res) => {
   res.json({ user: req.user });
 });
+
+
+// POST /api/auth/signup — self-serve workspace signup (public)
+router.post('/signup',
+  body('name').notEmpty().trim(),
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }),
+  body('workspace_name').notEmpty().trim(),
+  async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+      const { name, email, password, workspace_name } = req.body;
+
+      // Check email not already taken
+      const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+      if (existing.rows.length > 0) {
+        return res.status(409).json({ error: 'Email already registered' });
+      }
+
+      // Generate slug from workspace name
+      let slug = workspace_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const slugCheck = await query('SELECT id FROM workspaces WHERE slug = $1', [slug]);
+      if (slugCheck.rows.length > 0) slug = slug + '-' + Date.now();
+
+      // Create workspace
+      const wsResult = await query(
+        `INSERT INTO workspaces (name, slug, plan, trial_ends_at)
+         VALUES ($1, $2, 'trial', NOW() + INTERVAL '14 days') RETURNING *`,
+        [workspace_name, slug]
+      );
+      const workspace = wsResult.rows[0];
+
+      // Create super_admin user for this workspace
+      const password_hash = await bcrypt.hash(password, 12);
+      const userResult = await query(
+        `INSERT INTO users (email, name, password_hash, role, workspace_id, status)
+         VALUES ($1, $2, $3, 'super_admin', $4, 'online') RETURNING id, email, name, role, workspace_id`,
+        [email, name, password_hash, workspace.id]
+      );
+      const user = userResult.rows[0];
+
+      // Issue tokens
+      const { accessToken, refreshToken } = generateTokens(user.id);
+      const hash = await bcrypt.hash(refreshToken, 10);
+      await query(
+        `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+         VALUES ($1, $2, NOW() + INTERVAL '7 days')`,
+        [user.id, hash]
+      );
+
+      await auditLog(user.id, 'workspace.signup', email, { workspace_name, slug }, req.ip);
+
+      res.status(201).json({
+        accessToken,
+        refreshToken,
+        user: {
+          id:           user.id,
+          email:        user.email,
+          name:         user.name,
+          role:         user.role,
+          workspace_id: user.workspace_id
+        },
+        workspace: {
+          id:             workspace.id,
+          name:           workspace.name,
+          slug:           workspace.slug,
+          plan:           workspace.plan,
+          trial_ends_at:  workspace.trial_ends_at
+        }
+      });
+    } catch (err) { next(err); }
+  }
+);
 
 module.exports = router;

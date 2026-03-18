@@ -10,7 +10,11 @@ const WA_TOKEN = () => process.env.WHATSAPP_ACCESS_TOKEN;
 // GET /api/templates
 router.get('/', async (req, res, next) => {
   try {
-    const result = await query('SELECT * FROM message_templates ORDER BY created_at DESC');
+    const workspaceId = req.user.workspace_id;
+    const result = await query(
+      'SELECT * FROM message_templates WHERE workspace_id=$1 ORDER BY created_at DESC',
+      [workspaceId]
+    );
     res.json(result.rows);
   } catch(err) { next(err); }
 });
@@ -20,6 +24,7 @@ router.post('/', async (req, res, next) => {
   try {
     const { name, category, language, header_type, header_text, body, footer, variables } = req.body;
     if (!name || !body) return res.status(400).json({ error: 'name and body required' });
+    const workspaceId = req.user.workspace_id;
 
     const components = [];
     if (header_text) components.push({ type: 'HEADER', format: header_type || 'TEXT', text: header_text });
@@ -41,10 +46,10 @@ router.post('/', async (req, res, next) => {
     }
 
     const result = await query(
-      `INSERT INTO message_templates (name,category,language,header_type,header_text,body,footer,variables,meta_template_id,status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      `INSERT INTO message_templates (name,category,language,header_type,header_text,body,footer,variables,meta_template_id,status,workspace_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [name, category || 'MARKETING', language || 'en', header_type || null, header_text || null,
-       body, footer || null, JSON.stringify(variables || []), metaId, status]
+       body, footer || null, JSON.stringify(variables || []), metaId, status, workspaceId]
     );
 
     res.json({ ...result.rows[0], meta_error: metaError });
@@ -54,6 +59,7 @@ router.post('/', async (req, res, next) => {
 // POST /api/templates/sync — pull ALL templates from Meta and upsert locally
 router.post('/sync', async (req, res, next) => {
   try {
+    const workspaceId = req.user.workspace_id;
     const metaRes = await axios.get(
       `${WA_URL()}/${WABA_ID()}/message_templates?limit=100&fields=id,name,status,category,language,components`,
       { headers: { Authorization: `Bearer ${WA_TOKEN()}` } }
@@ -63,7 +69,6 @@ router.post('/sync', async (req, res, next) => {
     let synced = 0, imported = 0;
 
     for (const t of templates) {
-      // Extract components
       const bodyComp   = t.components?.find(c => c.type === 'BODY');
       const headerComp = t.components?.find(c => c.type === 'HEADER');
       const footerComp = t.components?.find(c => c.type === 'FOOTER');
@@ -73,21 +78,24 @@ router.post('/sync', async (req, res, next) => {
       const footerText = footerComp?.text || null;
       const lang       = Array.isArray(t.language) ? t.language[0] : (t.language || 'en');
 
-      // Upsert: update if exists by meta_template_id, insert if not
-      const existing = await query('SELECT id FROM message_templates WHERE meta_template_id=$1', [t.id]);
+      const existing = await query(
+        'SELECT id FROM message_templates WHERE meta_template_id=$1 AND workspace_id=$2',
+        [t.id, workspaceId]
+      );
+
       if (existing.rows.length) {
         await query(
           `UPDATE message_templates SET status=$1, name=$2, category=$3, language=$4,
-           header_text=$5, body=$6, footer=$7, updated_at=NOW() WHERE meta_template_id=$8`,
-          [t.status.toLowerCase(), t.name, t.category, lang, headerText, bodyText, footerText, t.id]
+           header_text=$5, body=$6, footer=$7, updated_at=NOW() WHERE meta_template_id=$8 AND workspace_id=$9`,
+          [t.status.toLowerCase(), t.name, t.category, lang, headerText, bodyText, footerText, t.id, workspaceId]
         );
         synced++;
       } else {
         await query(
-          `INSERT INTO message_templates (name, category, language, header_text, body, footer, meta_template_id, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          `INSERT INTO message_templates (name, category, language, header_text, body, footer, meta_template_id, status, workspace_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            ON CONFLICT DO NOTHING`,
-          [t.name, t.category, lang, headerText, bodyText || '(synced from Meta)', footerText, t.id, t.status.toLowerCase()]
+          [t.name, t.category, lang, headerText, bodyText || '(synced from Meta)', footerText, t.id, t.status.toLowerCase(), workspaceId]
         );
         imported++;
       }
@@ -103,7 +111,11 @@ router.post('/sync', async (req, res, next) => {
 // DELETE /api/templates/:id
 router.delete('/:id', async (req, res, next) => {
   try {
-    const t = await query('SELECT * FROM message_templates WHERE id=$1', [req.params.id]);
+    const workspaceId = req.user.workspace_id;
+    const t = await query(
+      'SELECT * FROM message_templates WHERE id=$1 AND workspace_id=$2',
+      [req.params.id, workspaceId]
+    );
     if (!t.rows.length) return res.status(404).json({ error: 'Not found' });
     if (t.rows[0].meta_template_id) {
       try {
@@ -113,7 +125,7 @@ router.delete('/:id', async (req, res, next) => {
         );
       } catch(e) { console.error('Meta delete error:', e.response?.data); }
     }
-    await query('DELETE FROM message_templates WHERE id=$1', [req.params.id]);
+    await query('DELETE FROM message_templates WHERE id=$1 AND workspace_id=$2', [req.params.id, workspaceId]);
     res.json({ success: true });
   } catch(err) { next(err); }
 });

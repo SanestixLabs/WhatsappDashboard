@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store';
 
@@ -104,6 +105,7 @@ export default function LoginPage() {
               {loading ? <><Spinner/>Signing in...</> : 'Sign in →'}
             </button>
           </form>
+          <p style={s.signupLink}>Don't have a workspace? <Link to="/signup" style={{color:'#00d4b8',textDecoration:'none',fontWeight:600}}>Create one free →</Link></p>
           <p style={s.copy}>© {new Date().getFullYear()} Sanestix · Internal use only</p>
         </div>
       </div>
@@ -158,4 +160,5 @@ const s = {
   eyeBtn:{ position:'absolute', right:'12px', background:'none', border:'none', cursor:'pointer', padding:'4px', display:'flex', alignItems:'center' },
   btn:{ width:'100%', background:'linear-gradient(135deg,#00d4b8,#00a898)', border:'none', borderRadius:'10px', padding:'13px', fontSize:'15px', fontWeight:'700', color:'#070b11', display:'flex', alignItems:'center', justifyContent:'center', transition:'opacity 0.15s', marginTop:'4px' },
   copy:{ fontSize:'11px', color:'#1a2e42', textAlign:'center', marginTop:'28px' },
+  signupLink:{ fontSize:'13px', color:'#3a5068', textAlign:'center', marginTop:'16px' },
 };

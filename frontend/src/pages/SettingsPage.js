@@ -1,18 +1,30 @@
 import React, { useState } from 'react';
 import CannedResponsesSettings from './settings/CannedResponsesSettings';
 import AISettings              from './settings/AISettings';
+import IntegrationsSettings    from './settings/IntegrationsSettings';
 
 const ZapIcon     = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
 const BotIcon     = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a3 3 0 016 0v2"/><path d="M9 14h.01M15 14h.01" strokeLinecap="round"/></svg>;
+const PlugIcon    = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M7 7l10 10"/><path d="M17 3l4 4-4 4M7 17l-4 4 4 4"/></svg>;
 const ChevronIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>;
 
 const TABS = [
-  { id:'ai',     label:'AI Management',    icon:<BotIcon/>,  desc:'Prompt, auto-pause, intents' },
-  { id:'canned', label:'Canned Responses', icon:<ZapIcon/>,  desc:'Quick reply shortcuts' },
+  { id:'ai',           label:'AI Management',    icon:<BotIcon/>,  desc:'Prompt, auto-pause, intents' },
+  { id:'canned',       label:'Canned Responses', icon:<ZapIcon/>,  desc:'Quick reply shortcuts' },
+  { id:'integrations', label:'Integrations',     icon:<PlugIcon/>, desc:'Shopify, CRM, Zapier' },
 ];
 
 export default function SettingsPage() {
   const [active, setActive] = useState('ai');
+
+  // Check if redirected from Shopify OAuth
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('shopify')) {
+      setActive('integrations');
+    }
+  }, []);
+
   return (
     <div style={{display:'flex',height:'100%',background:'#070b11',overflow:'hidden'}}>
       <div style={{width:'230px',borderRight:'1px solid rgba(255,255,255,0.06)',padding:'24px 0',flexShrink:0,overflowY:'auto'}}>
@@ -32,8 +44,9 @@ export default function SettingsPage() {
         ))}
       </div>
       <div style={{flex:1,overflowY:'auto'}}>
-        {active==='ai'     && <AISettings/>}
-        {active==='canned' && <CannedResponsesSettings/>}
+        {active==='ai'           && <AISettings/>}
+        {active==='canned'       && <CannedResponsesSettings/>}
+        {active==='integrations' && <IntegrationsSettings/>}
       </div>
     </div>
   );

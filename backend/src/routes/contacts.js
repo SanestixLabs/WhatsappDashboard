@@ -23,8 +23,9 @@ router.get('/', async (req, res, next) => {
   try {
     const { page = 1, limit = 25, search, tag, opted_out } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
-    const conditions = [];
     const params = [];
+    const conditions = ['workspace_id = $' + (params.length + 1)];
+    params.push(req.workspaceId);
 
     if (search) {
       params.push('%' + search + '%');
@@ -56,8 +57,9 @@ router.get('/', async (req, res, next) => {
 // GET /api/contacts/tags — all unique tags
 router.get('/tags', async (req, res, next) => {
   try {
-    const result = await query(`SELECT DISTINCT unnest(tags) as tag FROM contacts WHERE tags != '{}' ORDER BY tag`);
-    res.json(result.rows.map(r => r.tag));
+    
+    const tagsResult = await query(`SELECT DISTINCT unnest(tags) as tag FROM contacts WHERE workspace_id = $1 AND tags != '{}' ORDER BY tag`, [req.workspaceId]);
+    res.json(tagsResult.rows.map(r => r.tag));
   } catch (err) { next(err); }
 });
 
@@ -65,9 +67,9 @@ router.get('/tags', async (req, res, next) => {
 router.get('/export', async (req, res, next) => {
   try {
     const { tag } = req.query;
-    let sql = 'SELECT phone_number, name, email, tags, notes, opted_out, created_at FROM contacts';
-    const params = [];
-    if (tag) { params.push(tag); sql += ` WHERE $1 = ANY(tags)`; }
+    let sql = 'SELECT phone_number, name, email, tags, notes, opted_out, created_at FROM contacts WHERE workspace_id = $1';
+    const params = [req.workspaceId];
+    if (tag) { params.push(tag); sql += ` AND $2 = ANY(tags)`; }
     sql += ' ORDER BY created_at DESC';
     const result = await query(sql, params);
 
@@ -96,18 +98,41 @@ router.post('/import', async (req, res, next) => {
       if (!c.phone_number) { skipped++; continue; }
       const tags = Array.isArray(c.tags) ? c.tags : (c.tags ? c.tags.split(';') : []);
       await query(
-        `INSERT INTO contacts (phone_number, name, email, tags)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT (phone_number) DO UPDATE
+        `INSERT INTO contacts (phone_number, name, email, tags, workspace_id)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (phone_number, workspace_id) DO UPDATE
          SET name=COALESCE(EXCLUDED.name, contacts.name),
              email=COALESCE(EXCLUDED.email, contacts.email),
              tags=CASE WHEN EXCLUDED.tags != '{}' THEN EXCLUDED.tags ELSE contacts.tags END,
              updated_at=NOW()`,
-        [c.phone_number.trim(), c.name || null, c.email || null, tags]
+        [c.phone_number.trim(), c.name || null, c.email || null, tags, req.workspaceId]
       );
       imported++;
     }
     res.json({ imported, skipped });
+  } catch (err) { next(err); }
+});
+
+
+// POST /api/contacts — create single contact manually
+router.post('/', async (req, res, next) => {
+  try {
+    const { phone_number, name, email, tags, notes } = req.body;
+    if (!phone_number) return res.status(400).json({ error: 'phone_number required' });
+    const tagArr = Array.isArray(tags) ? tags : (tags ? tags.split(',').map(t=>t.trim()).filter(Boolean) : []);
+    const result = await query(
+      `INSERT INTO contacts (phone_number, name, email, tags, notes, workspace_id)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (phone_number, workspace_id) DO UPDATE
+       SET name=COALESCE(EXCLUDED.name, contacts.name),
+           email=COALESCE(EXCLUDED.email, contacts.email),
+           tags=CASE WHEN EXCLUDED.tags != '{}' THEN EXCLUDED.tags ELSE contacts.tags END,
+           notes=COALESCE(EXCLUDED.notes, contacts.notes),
+           updated_at=NOW()
+       RETURNING *`,
+      [phone_number.trim(), name || null, email || null, tagArr, notes || null, req.workspaceId]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) { next(err); }
 });
 
@@ -118,7 +143,7 @@ router.get('/:id', async (req, res, next) => {
       SELECT c.*,
         (SELECT COUNT(*) FROM conversations WHERE contact_id = c.id) as conversation_count,
         (SELECT COUNT(*) FROM messages m JOIN conversations cv ON m.conversation_id=cv.id WHERE cv.contact_id=c.id) as message_count
-      FROM contacts c WHERE c.id=$1`, [req.params.id]);
+      FROM contacts c WHERE c.id=$1 AND c.workspace_id=$2`, [req.params.id, req.workspaceId]);
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(result.rows[0]);
   } catch (err) { next(err); }
@@ -138,8 +163,8 @@ router.patch('/:id', async (req, res, next) => {
         opted_out=COALESCE($6,opted_out),
         opted_out_at=CASE WHEN $6=true AND opted_out=false THEN NOW() ELSE opted_out_at END,
         updated_at=NOW()
-       WHERE id=$7 RETURNING *`,
-      [name, tags, email, notes, custom_fields ? JSON.stringify(custom_fields) : null, opted_out, req.params.id]
+       WHERE id=$7 AND workspace_id=$8 RETURNING *`,
+      [name, tags, email, notes, custom_fields ? JSON.stringify(custom_fields) : null, opted_out, req.params.id, req.workspaceId]
     );
     if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
     res.json(result.rows[0]);
@@ -152,8 +177,8 @@ router.post('/:id/tags', async (req, res, next) => {
     const { tags } = req.body;
     if (!Array.isArray(tags)) return res.status(400).json({ error: 'tags array required' });
     const result = await query(
-      `UPDATE contacts SET tags = array(SELECT DISTINCT unnest(tags || $1::text[])), updated_at=NOW() WHERE id=$2 RETURNING *`,
-      [tags, req.params.id]
+      `UPDATE contacts SET tags = array(SELECT DISTINCT unnest(tags || $1::text[])), updated_at=NOW() WHERE id=$2 AND workspace_id=$3 RETURNING *`,
+      [tags, req.params.id, req.workspaceId]
     );
     res.json(result.rows[0]);
   } catch (err) { next(err); }
@@ -163,8 +188,8 @@ router.post('/:id/tags', async (req, res, next) => {
 router.delete('/:id/tags/:tag', async (req, res, next) => {
   try {
     const result = await query(
-      `UPDATE contacts SET tags = array_remove(tags, $1), updated_at=NOW() WHERE id=$2 RETURNING *`,
-      [req.params.tag, req.params.id]
+      `UPDATE contacts SET tags = array_remove(tags, $1), updated_at=NOW() WHERE id=$2 AND workspace_id=$3 RETURNING *`,
+      [req.params.tag, req.params.id, req.workspaceId]
     );
     res.json(result.rows[0]);
   } catch (err) { next(err); }
@@ -175,9 +200,21 @@ router.post('/:id/avatar', upload.single('avatar'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file' });
     const url = '/uploads/avatars/' + req.file.filename;
-    const result = await query('UPDATE contacts SET profile_pic_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *', [url, req.params.id]);
+    const result = await query('UPDATE contacts SET profile_pic_url=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3 RETURNING *', [url, req.params.id, req.workspaceId]);
     res.json(result.rows[0]);
   } catch (err) { next(err); }
 });
 
 module.exports = router;
+
+// DELETE /api/contacts/:id — permanently delete a contact
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const result = await query(
+      `DELETE FROM contacts WHERE id=$1 AND workspace_id=$2 RETURNING id`,
+      [req.params.id, req.workspaceId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ deleted: true, id: req.params.id });
+  } catch (err) { next(err); }
+});

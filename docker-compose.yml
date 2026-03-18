@@ -47,6 +47,7 @@ services:
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID}
       WHATSAPP_API_VERSION:   ${WHATSAPP_API_VERSION:-v19.0}
       META_WABA_ID:             ${META_WABA_ID}
+      META_APP_ID:              ${META_APP_ID}
       N8N_WEBHOOK_URL:        ${N8N_WEBHOOK_URL}
       N8N_SECRET:             ${N8N_SECRET}
       SMTP_HOST:              ${SMTP_HOST}
@@ -54,6 +55,10 @@ services:
       SMTP_USER:              ${SMTP_USER}
       SMTP_PASS:              ${SMTP_PASS}
       SMTP_FROM:              ${SMTP_FROM}
+      SHOPIFY_API_KEY:         ${SHOPIFY_API_KEY}
+      SHOPIFY_API_SECRET:      ${SHOPIFY_API_SECRET}
+      SHOPIFY_SCOPES:          ${SHOPIFY_SCOPES}
+      SHOPIFY_APP_URL:         ${SHOPIFY_APP_URL}
     depends_on:
       postgres:
         condition: service_healthy
