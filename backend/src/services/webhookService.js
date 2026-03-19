@@ -133,7 +133,9 @@ const handleIncomingMessage = async (waMsg, metadata, io) => {
 
     // ── Shopify order confirmation button reply interceptor ──────
     if (type === 'interactive') {
-      const buttonId = waMsg.interactive?.button_reply?.id || '';
+      // Handle both regular button replies (id) and template quick_reply (payload)
+      const buttonId = waMsg.interactive?.button_reply?.id ||
+                       waMsg.interactive?.button_reply?.payload || '';
       if (buttonId.startsWith('shopify_confirm_') || buttonId.startsWith('shopify_cancel_')) {
         const isConfirm = buttonId.startsWith('shopify_confirm_');
         const orderNumber = buttonId.replace('shopify_confirm_', '').replace('shopify_cancel_', '');

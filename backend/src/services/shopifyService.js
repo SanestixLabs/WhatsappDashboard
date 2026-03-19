@@ -58,6 +58,7 @@ function getPhone(order) {
     order.billing_address?.phone ||
     order.shipping_address?.phone ||
     order.customer?.phone ||
+    order.customer?.default_address?.phone ||
     null
   );
 }
@@ -133,7 +134,7 @@ async function handleOrderCreated(workspaceId, order) {
     }
 
     // 4. Send interactive confirmation buttons
-    const waResult = await sendOrderConfirmationSmart(phone, orderNumber, total, itemsText);
+    const waResult = await sendOrderConfirmationSmart(phone, orderNumber, total, order.line_items || [], customerName);
     const waMessageId = waResult?.messages?.[0]?.id || null;
 
     // 5. Save outbound message to DB so it appears in chat window

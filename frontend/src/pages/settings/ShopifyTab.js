@@ -303,7 +303,7 @@ function TemplatesPanel({ connected }) {
   if (loading) return <div style={{ padding:40, textAlign:'center', color:T.text2, fontSize:13 }}>Loading templates...</div>;
 
   return (
-    <div>
+    <div style={{ maxHeight:'calc(100vh - 280px)', overflowY:'auto', paddingRight:4 }}>
       <div style={{ fontSize:13, color:T.text2, marginBottom:20, padding:'12px 16px', background:'rgba(0,212,184,0.05)', border:'1px solid '+T.tealBorder, borderRadius:10 }}>
         <strong style={{ color:T.teal }}>How it works:</strong> These templates are sent automatically via WhatsApp when Shopify triggers an order event. Use variables like <code style={{ background:T.bg3, padding:'1px 6px', borderRadius:4, fontSize:12 }}>{'{{customer_name}}'}</code> — they are replaced with real order data.
       </div>
@@ -456,7 +456,7 @@ function LogsPanel({ connected }) {
             No webhook events yet. Place a test order in Shopify to see logs here.
           </div>
         ) : (
-          <div style={{ overflowX:'auto' }}>
+          <div style={{ overflowX:'auto', maxHeight:'calc(100vh - 380px)', overflowY:'auto' }}>
             <table style={{ width:'100%', borderCollapse:'collapse', minWidth:580 }}>
               <thead>
                 <tr style={{ background:T.bg3 }}>
